@@ -1,209 +1,183 @@
+"""İkiz API (v2): Gözlemevi çok-ajanlı sistemi için HTTP katmanı.
+
+Çalıştır:  uvicorn server:app --host 0.0.0.0 --port 8000
+Ortam: ANTHROPIC_API_KEY | HF_TOKEN (+LLM_MODEL) | LLM_API_KEY+LLM_BASE_URL; yoksa demo modu. IKIZ_DB=kalıcı SQLite yolu.
+Sözleşme: docs/API.md
 """
-İkiz API — mobil uygulamanın konuştuğu Python backend.
-
-Çalıştırma (telefon aynı Wi-Fi'dan erişebilsin diye 0.0.0.0):
-    uvicorn server:app --host 0.0.0.0 --port 8000
-
-ANTHROPIC_API_KEY tanımlı değilse ajanlar demo modunda (hazır cevaplarla) çalışır.
-Oturumlar bellekte tutulur; sunucu yeniden başlarsa sıfırlanır.
-"""
-
 from __future__ import annotations
 
-import io
-import uuid
-from dataclasses import asdict
+import asyncio
+import json
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+import gozlemevi as g
 import ikiz_ajan as ia
+import store
 
-app = FastAPI(title="İkiz API", version="1.0")
+app = FastAPI(title="İkiz API", version="2.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-SESSIONS: dict[str, dict] = {}
+
+class SonTarih(BaseModel):
+    baslik: str = Field(max_length=80)
+    tarih: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
 
 
-# ---------------------------------------------------------------------------
-# İstek gövdeleri
-# ---------------------------------------------------------------------------
-class OnboardingIn(BaseModel):
-    name: str = ""
-    cv_text: str = ""
-    hobbies: list[str] = []
-    goals: list[str] = []
-    daily_minutes: int = Field(30, ge=5, le=240)
+class OturumIstek(BaseModel):
+    ad: str = Field(default="Elif", max_length=40)
+    akademik: str | None = Field(default=None, max_length=80)
+    hobi: str | None = Field(default=None, max_length=80)
+    dakika: int = Field(default=30, ge=10, le=240)
+    zaman: str = Field(default="aksam", pattern="^(sabah|ogle|aksam)$")
+    son_tarihler: list[SonTarih] = Field(default_factory=list, max_length=5)
 
 
-class DayIn(BaseModel):
-    completed_ids: list[str] = []
+class GunIstek(BaseModel):
+    gun: int = Field(default=1, ge=1, le=21)
+    tutarlilik: float = Field(default=0.4, ge=0, le=1)
 
 
-class FastForwardIn(BaseModel):
-    days: int = Field(7, ge=1, le=30)
-    consistency: float = Field(0.4, ge=0.0, le=1.0)
+class MetinIstek(BaseModel):
+    metin: str = Field(max_length=1600)
+    alan: str = "akademik"
 
 
-class ReplanIn(BaseModel):
-    reason: str | None = None
+class KararIstek(BaseModel):
+    pass
 
 
-class TalkIn(BaseModel):
-    message: str
-    mode: str = "chat"  # "chat" | "teach"
-
-
-# ---------------------------------------------------------------------------
-# Yardımcılar
-# ---------------------------------------------------------------------------
-def _get(sid: str) -> dict:
-    s = SESSIONS.get(sid)
+def _var(sid: str) -> dict:
+    s = store.get(sid)
     if not s:
-        raise HTTPException(404, "Oturum bulunamadı. Uygulamayı baştan başlat.")
+        raise HTTPException(404, "Oturum bulunamadı")
     return s
 
 
-def _require_started(s: dict) -> None:
-    if "state" not in s:
-        raise HTTPException(409, "Önce hedefle başla.")
+@app.get("/health")
+def health():
+    return {"ok": True, "surum": "2.0", "demo": ia.is_mock(), "saglayici": ia.provider(), "model": ia.model_name()}
 
 
-def _history(s: dict) -> list[dict]:
-    goal: ia.GoalDecision = s["goal"]
-    base = ia._avg({k: s["profile"].skills.get(k, 0.0) for k in goal.target_skills})
-    rows = [{"day": 0, "real": base, "ideal": base}]
-    rows += [{"day": e["day"], "real": e["real_avg"], "ideal": e["ideal_avg"]} for e in s["state"].log]
-    return rows
+@app.post("/v2/sessions")
+def oturum_ac(r: OturumIstek):
+    if not r.akademik and not r.hobi:
+        raise HTTPException(422, "En az bir alan seç: akademik veya hobi")
+    sid = g.yeni_oturum(r.ad, r.akademik, r.hobi, r.dakika, r.zaman, [d.model_dump() for d in r.son_tarihler])
+    g._calistir(g.kurulum, sid)
+    return {"session_id": sid}
 
 
-def _view(sid: str) -> dict:
-    """Mobil uygulamanın ihtiyaç duyduğu her şey tek cevapta."""
-    s = _get(sid)
-    out = {
-        "session_id": sid,
-        "mock": ia.is_mock(),
-        "profile": asdict(s["profile"]),
-        "goal": asdict(s["goal"]),
-        "started": "state" in s,
-    }
-    if "state" in s:
-        st: ia.TwinState = s["state"]
-        out.update({
-            "roadmap": asdict(s["roadmap"]),
-            "twin": ia.twin_snapshot(st),
-            "history": _history(s),
-            "today": st.day + 1,
-            "finished": st.day >= s["goal"].duration_days,
-            "coach": s.get("coach"),
-            "replan": s.get("replan"),
-            "chat": s.get("chat", []),
-        })
+@app.get("/v2/sessions/{sid}")
+def oturum(sid: str):
+    _var(sid)
+    return g.gorunum(sid)
+
+
+@app.delete("/v2/sessions/{sid}")
+def oturum_sil(sid: str):
+    if not store.delete(sid):
+        raise HTTPException(404, "Oturum bulunamadı")
+    return {"ok": True}
+
+
+@app.get("/v2/sessions/{sid}/events")
+def olaylar(sid: str, after: int = 0):
+    _var(sid)
+    return g.olaylar(sid, after)
+
+
+@app.get("/v2/sessions/{sid}/stream")
+async def akis(sid: str, after: int = 0):
+    _var(sid)
+
+    async def gen():
+        son = after
+        bos = 0
+        while True:
+            o = g.olaylar(sid, son)
+            if o is None:
+                break
+            for e in o["olaylar"]:
+                son = e["id"]
+                yield f"id: {e['id']}\nevent: olay\ndata: {json.dumps(e, ensure_ascii=False)}\n\n"
+            if o["olaylar"]:
+                bos = 0
+            else:
+                bos += 1
+                yield ": ping\n\n"
+                if o["durum"] == "hazir" and bos > 20:
+                    break
+            await asyncio.sleep(0.5)
+
+    return StreamingResponse(gen(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
+
+
+@app.post("/v2/sessions/{sid}/tasks/{task_id}/complete")
+def gorev_tamamla(sid: str, task_id: str, yapildi: bool = True):
+    _var(sid)
+    r = g.gorev_tamamla(sid, task_id, yapildi)
+    if not r["ok"]:
+        raise HTTPException(409, r["mesaj"])
+    return g.gorunum(sid)
+
+
+@app.post("/v2/sessions/{sid}/day/close")
+def gun_kapat(sid: str):
+    _var(sid)
+    g._calistir(g.gun_kapat, sid, "gercek")
+    return {"ok": True}
+
+
+@app.post("/v2/sessions/{sid}/demo/skip")
+def demo_atla(sid: str, r: GunIstek):
+    _var(sid)
+    g._calistir(g.gun_kapat, sid, "demo", r.gun, r.tutarlilik)
+    return {"ok": True}
+
+
+@app.post("/v2/sessions/{sid}/assign")
+def gorev_ver(sid: str, r: MetinIstek):
+    _var(sid)
+    out = g.gorev_denetle_ve_planla(sid, r.metin)
+    if not out["ok"]:
+        return {"ok": False, "engel": out["engel"], "mesaj": out["mesaj"]}
     return out
 
 
-# ---------------------------------------------------------------------------
-# Uç noktalar
-# ---------------------------------------------------------------------------
-@app.get("/health")
-def health():
-    return {"ok": True, "mock": ia.is_mock(), "model": ia.MODEL}
+@app.post("/v2/sessions/{sid}/proposals/{pid}/approve")
+def onayla(sid: str, pid: str):
+    _var(sid)
+    if g.oneriyi_karara_bagla(sid, pid, True) is None:
+        raise HTTPException(404, "Öneri bulunamadı")
+    return g.gorunum(sid)
 
 
-@app.post("/cv/parse")
-async def parse_cv(file: UploadFile = File(...)):
-    """PDF CV'den metin çıkarır; mobil uygulama sonucu onboarding formuna koyar."""
-    data = await file.read()
-    if len(data) > 8 * 1024 * 1024:
-        raise HTTPException(413, "PDF 8 MB'tan büyük olmamalı.")
-    try:
-        from pypdf import PdfReader
-        reader = PdfReader(io.BytesIO(data))
-        text = "\n".join((p.extract_text() or "") for p in reader.pages).strip()
-    except Exception as e:  # noqa: BLE001
-        raise HTTPException(400, f"PDF okunamadı: {e}") from e
-    if not text:
-        raise HTTPException(422, "PDF'te metin bulunamadı (taranmış bir görsel olabilir).")
-    return {"text": text}
+@app.post("/v2/sessions/{sid}/proposals/{pid}/reject")
+def reddet(sid: str, pid: str):
+    _var(sid)
+    if g.oneriyi_karara_bagla(sid, pid, False) is None:
+        raise HTTPException(404, "Öneri bulunamadı")
+    return g.gorunum(sid)
 
 
-@app.post("/sessions")
-def create_session(body: OnboardingIn):
-    if not body.cv_text.strip() and not body.goals:
-        raise HTTPException(422, "En azından CV'ni ya da hedeflerini yazmalısın.")
-    profile = ia.extract_profile(body.name or "Kullanıcı", body.cv_text, body.hobbies, body.goals, body.daily_minutes)
-    goal = ia.select_goal(profile)
-    sid = uuid.uuid4().hex[:12]
-    SESSIONS[sid] = {"profile": profile, "goal": goal, "chat": []}
-    return _view(sid)
+@app.post("/v2/sessions/{sid}/teach/add")
+def ogret_ekle(sid: str, r: MetinIstek):
+    _var(sid)
+    return g.ogret_ekle(sid, r.metin, r.alan)
 
 
-@app.get("/sessions/{sid}")
-def get_session(sid: str):
-    return _view(sid)
+@app.delete("/v2/sessions/{sid}/teach")
+def ogret_sil(sid: str):
+    _var(sid)
+    g.ogret_sil(sid)
+    return {"ok": True}
 
 
-@app.post("/sessions/{sid}/start")
-def start(sid: str):
-    s = _get(sid)
-    s["roadmap"] = ia.build_roadmap(s["profile"], s["goal"])
-    s["state"] = ia.init_twin(s["profile"], s["goal"])
-    s["coach"], s["replan"] = None, None
-    return _view(sid)
-
-
-@app.post("/sessions/{sid}/day")
-def close_day(sid: str, body: DayIn):
-    s = _get(sid)
-    _require_started(s)
-    if s["state"].day >= s["goal"].duration_days:
-        raise HTTPException(409, "Hedef süresi tamamlandı.")
-    ia.advance_day(s["state"], s["roadmap"], set(body.completed_ids))
-    s["replan"] = None
-    s["coach"] = ia.coach_feedback(s["state"])
-    return _view(sid)
-
-
-@app.post("/sessions/{sid}/fast-forward")
-def fast_forward(sid: str, body: FastForwardIn):
-    s = _get(sid)
-    _require_started(s)
-    st: ia.TwinState = s["state"]
-    days = min(body.days, s["goal"].duration_days - st.day)
-    if days <= 0:
-        raise HTTPException(409, "Hedef süresi tamamlandı.")
-    ia.fast_forward(st, s["roadmap"], days, body.consistency, seed=st.day + 7)
-    s["replan"] = None
-    s["coach"] = ia.coach_feedback(st)
-    return _view(sid)
-
-
-@app.post("/sessions/{sid}/replan")
-def replan(sid: str, body: ReplanIn):
-    s = _get(sid)
-    _require_started(s)
-    st: ia.TwinState = s["state"]
-    result = ia.maybe_replan(st, s["roadmap"], s["goal"], (body.reason or "").strip() or None)
-    if result is None:
-        raise HTTPException(409, "Şu an yeniden planlamaya gerek yok.")
-    st.risk, st.missed_days = "steady", 0
-    s["replan"] = result
-    s["coach"] = ia.coach_feedback(st)
-    return _view(sid)
-
-
-@app.post("/sessions/{sid}/talk")
-def talk(sid: str, body: TalkIn):
-    s = _get(sid)
-    _require_started(s)
-    if not body.message.strip():
-        raise HTTPException(422, "Mesaj boş olamaz.")
-    mode = "teach" if body.mode == "teach" else "chat"
-    out = ia.twin_talk(s["state"], s["roadmap"], body.message, mode=mode)
-    s["chat"] += [
-        {"role": "user", "text": body.message, "mode": mode},
-        {"role": "twin", "text": out.get("reply", ""), "questions": out.get("questions") or [],
-         "score": out.get("teach_score"), "score_reason": out.get("teach_reason")},
-    ]
-    return _view(sid)
+@app.post("/v2/sessions/{sid}/teach/exam")
+def ogret_sinav(sid: str):
+    _var(sid)
+    return g.ogret_sinav(sid)
