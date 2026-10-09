@@ -154,7 +154,22 @@ _DEMO_EXAMS["türev"] = [
                  "Hayır. Türev işaret değiştirmiyorsa (örn. x³ için x = 0) tepe ya da çukur olmaz.",
                  ["sıfır", "tepe", "çukur"]),
 ]
+_DEMO_EXAMS["gitar"] = [
+    ExamQuestion("q1", "Akor geçişlerinde takılmamak için ne yapılır?",
+                 "Yavaş tempoda, metronomla tekrar eder; parmakları bir sonraki akora önceden hazırlarız.",
+                 ["yavaş", "metronom", "tekrar"]),
+    ExamQuestion("q2", "Tırmalama kalıbında elin hareketi nasıl olmalı?",
+                 "Bilekten, düzenli ve rahat bir aşağı-yukarı hareketle; ritim hiç durmadan sürer.",
+                 ["bilek", "aşağı", "yukarı"]),
+    ExamQuestion("q3", "Tellerin tıkırtılı ses vermesinin yaygın nedeni nedir?",
+                 "Parmağın teli perdenin yanında değil üstünde basması ya da komşu tele değmesi.",
+                 ["perde", "komşu", "bas"]),
+]
 _DEMO_HINTS_Q = {
+    "Akor geçişlerinde takılmamak için ne yapılır?": "İkizin geçişleri nasıl çalışacağını bilmiyor. Tempoyu nasıl seçtiğini anlattın mı?",
+    "Tırmalama kalıbında elin hareketi nasıl olmalı?": "Hareketin nereden geldiğini ve nasıl aktığını ikizine anlattın mı?",
+    "Tellerin tıkırtılı ses vermesinin yaygın nedeni nedir?": "Parmağın tele nereye bastığını ve çevresindeki tellere ne olduğunu anlat.",
+
     "Türev neyi ölçer?": "İkizin türevin neyi ifade ettiğini bilmiyor. Ona bir günlük hayat örneğiyle anlattın mı?",
     "Türev pozitifse fonksiyona ne olur?": "Türevin işaretinin fonksiyonun yönüyle ilişkisini ikizine anlattın mı?",
     "Türevin sıfır olduğu her nokta tepe ya da çukur müdür?":
@@ -175,7 +190,25 @@ def _demo_exam(topic: str) -> list[ExamQuestion]:
     for key, exam in _DEMO_EXAMS.items():
         if key in _norm(topic):
             return exam
-    return _DEMO_EXAMS["pandas"]
+    return _generic_exam(topic)
+
+
+def _generic_exam(topic: str) -> list[ExamQuestion]:
+    """Bilinmeyen konu için: konunun ne olduğu, bir örnek ve sık yapılan hata sorulur."""
+    k = _norm(topic).split()[:2] or ["konu"]
+    return [
+        ExamQuestion("q1", f"{topic} nedir, ne işe yarar?", f"{topic} kavramının tanımı ve amacı.", k),
+        ExamQuestion("q2", f"{topic} için bir örnek ver.", "Somut ve doğru bir örnek.", ["örnek", "mesela", "diyelim"]),
+        ExamQuestion("q3", f"{topic} konusunda sık yapılan hata nedir?", "Yaygın bir yanılgı ve doğrusu.", ["hata", "yanlış", "dikkat"]),
+    ]
+
+
+def _hint(q: ExamQuestion) -> str:
+    if q.question in _DEMO_HINTS_Q:
+        return _DEMO_HINTS_Q[q.question]
+    if q in _DEMO_EXAMS["pandas"]:
+        return _DEMO_HINTS.get(q.id)
+    return "İkizin bunu bilmiyor. Bu noktayı kendi cümlenle, bir örnekle anlatmayı dene."
 
 
 def _demo_answers(exam: list[ExamQuestion], sentences: list[str]) -> list[TwinAnswer]:
@@ -193,14 +226,14 @@ def _demo_verdicts(exam: list[ExamQuestion], answers: list[TwinAnswer]) -> list[
     out = []
     for q, a in zip(exam, answers):
         if not a.cited:
-            out.append(Verdict(q.id, "anlatilmadi", _DEMO_HINTS_Q.get(q.question, _DEMO_HINTS.get(q.id))))
+            out.append(Verdict(q.id, "anlatilmadi", _hint(q)))
             continue
         covered = sum(1 for k in q.key_points if _norm(k) in _norm(a.answer))
         result = "dogru" if covered >= min(2, len(q.key_points)) else "eksik"
         # Yanlış genelleme: "her ... tepe/çukur" der ama işaret değişimini anlatmaz
         if "tepe" in _norm(q.question) and "her" in _norm(a.answer).split() and "işaret" not in _norm(a.answer):
             result = "yanlis"
-        hint = None if result == "dogru" else _DEMO_HINTS_Q.get(q.question, _DEMO_HINTS.get(q.id))
+        hint = None if result == "dogru" else _hint(q)
         out.append(Verdict(q.id, result, hint))
     return out
 
