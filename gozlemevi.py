@@ -227,6 +227,7 @@ def kurulum(sid: str, yalniz: list[str] | None = None) -> None:
             emit(s, "Haritacı", f"{_ad(s, alan)} için {tr['goal']['duration_days']} günlük gök haritası çiziliyor…", "start", alan=alan)
             tr["roadmap"] = _yol_uret(s, alan, konu, tr["profile"], tr["goal"])
             tr["twin"] = asdict(ia.init_twin(_profile(tr["profile"]), _goal(tr["goal"])))
+            emit(s, "İkiz", f"{_ad(s, alan)} için yeni bir ikiz doğdu: {_ikiz_kimlik(s, alan, tr)['ad']}. Hiçbir şey bilmiyor; ona yalnızca sen öğreteceksin.", "done", alan=alan)
             _gecikme()
             emit(s, "Haritacı", f"{_ad(s, alan)}: {len(tr['roadmap']['tasks'])} yıldız yerleştirdi. İlk 3 gün kolay; her 4 günde bir \"ikizine öğret\".",
                  "done", alan=alan)
@@ -236,8 +237,9 @@ def kurulum(sid: str, yalniz: list[str] | None = None) -> None:
             emit(s, "Kaynak Avcısı", f"{_ad(s, alan)}: “{konu}” için kaynaklara bakıyor…", "start", alan=alan)
             _gecikme()
             tr = s["tracks"][alan]
-            tr["kaynaklar"] = kaynak_avcisi.tara(konu, s.get("seviye", "baslangic"), s["daily_minutes"], s.get("not", ""))
+            tr["kaynaklar"] = kaynak_avcisi.tara(konu, s.get("seviye", "baslangic"), s["daily_minutes"], s.get("not", ""), _tur(alan))
             k = tr["kaynaklar"]
+            emit(s, "Kaynak Avcısı", f"{_ad(s, alan)}: bu bir {k['strateji']['ad'].lower()} → {k['strateji']['adimlar'][0].lower()} stratejisiyle arıyor.", "info", alan=alan)
             if k["kaynak_turu"] == "dogrulanmis":
                 emit(s, "Kaynak Avcısı", f"{_ad(s, alan)}: {1 + len(k['alternatifler'])} kaynağı puanladı. Birincil: {k['secim']['baslik']} ({k['secim']['puan']}/100).",
                      "done", {"secim": k["secim"]["id"]}, alan)
@@ -469,7 +471,7 @@ def _gorev_yurut(sid: str, jid: str) -> None:
                 elif a["ad"] == "mini_sinav":
                     _mini_sinav(s, job, alan, tr)
                 elif a["ad"] == "kaynak":
-                    k = kaynak_avcisi.tara(tr["topic"], s.get("seviye", "baslangic"), s["daily_minutes"], s.get("not", ""))
+                    k = kaynak_avcisi.tara(tr["topic"], s.get("seviye", "baslangic"), s["daily_minutes"], s.get("not", ""), _tur(alan))
                     tr["kaynaklar"] = k
                     job["sonuc"]["kaynak"] = ([f"Birincil: {k['secim']['baslik']}"] + [x["baslik"] for x in k["alternatifler"][:3]]
                                               if k["secim"] else [x["ad"] for x in k["platformlar"]])
@@ -582,7 +584,7 @@ def ogret_ekle(sid: str, metin: str, alan: str) -> dict:
         if len("\n".join(birlesik)) > gv.MAX_KARAKTER or len(birlesik) > gv.MAX_CUMLE:
             return {"ok": False, "engel": "cok_uzun", "mesaj": "İkizin için yeterince anlattın; bir kısmını silip sadeleştir.", "uyarilar": []}
         t.update({"alan": alan, "konu": ogret_konu(s, alan), "cumleler": birlesik, "son": None})
-        emit(s, "İkiz", f"{len(yeni)} yeni cümle dinledi; sınavda yalnızca bunları kullanabilecek.", "info", alan=alan)
+        emit(s, "İkiz", f"{_ikiz_ad(s, alan)}: {len(yeni)} yeni cümle dinledi; sınavda yalnızca bunları kullanabilecek.", "info", alan=alan)
         store.save(s)
         return {"ok": True, "uyarilar": d.uyarilar}
 
@@ -691,16 +693,16 @@ def ogret_sinav(sid: str, gorev_id: str | None = None) -> dict:
             anahtar = gorev["id"] if gorev else f"serbest-{len(tr.get('ikiz_bilgi', {})) + 1}"
             onceki = tr.setdefault("ikiz_bilgi", {}).get(anahtar)
             if onceki and onceki.get("star") == "halkali" and sonuc.star != "halkali":
-                emit(s, "İkiz", f"“{baslik}” için önceki anlatımın daha iyiydi; bilgimi korudum, bu denemeyi kaydetmedim.", "info", alan=alan)
+                emit(s, "İkiz", f"{_ikiz_ad(s, alan)}: “{baslik}” için önceki anlatımın daha iyiydi; bilgimi korudum, bu denemeyi kaydetmedim.", "info", alan=alan)
             else:
                 tr["ikiz_bilgi"][anahtar] = {"baslik": baslik, "star": sonuc.star, "score": sonuc.score, "total": len(sonuc.exam),
                                              "gun": tr["twin"]["day"] + 1, "cumleler": list(t["cumleler"]), "son": gorunum,
                                              "deneme": (onceki or {}).get("deneme", 0) + 1}
             t["kavram"] = gorev["id"] if gorev else "serbest"
             if sonuc.star == "sonuk":
-                emit(s, "İkiz", f"“{baslik}” hakkında hâlâ bir şey bilmiyorum. Bana biraz daha anlatır mısın?", "info", alan=alan)
+                emit(s, "İkiz", f"{_ikiz_ad(s, alan)}: “{baslik}” hakkında hâlâ bir şey bilmiyorum. Bana biraz daha anlatır mısın?", "info", alan=alan)
             else:
-                emit(s, "İkiz", f"Artık “{baslik}” konusunu biliyorum ({sonuc.score}/{len(sonuc.exam)}). Bildiğim her şeyi senden öğrendim.",
+                emit(s, "İkiz", f"{_ikiz_ad(s, alan)}: Artık “{baslik}” konusunu biliyorum ({sonuc.score}/{len(sonuc.exam)}). Bildiğim her şeyi senden öğrendim.",
                      "done", {"star": sonuc.star}, alan)
         if sonuc.exam and gorev and sonuc.star != "sonuk":
             if gorev["day"] == tr["twin"]["day"] + 1:
@@ -754,6 +756,40 @@ def _parlaklik(tr: dict) -> int:
     return _ikiz_gorunum(None, tr)["bilgi_yuzde"]
 
 
+# Her takımyıldızın kendi ikizi var: ilerleme konuya göre farklı olduğu için ikiz de konuya özgüdür.
+IKIZ_ADLARI = ["Vega", "Altair", "Deneb", "Lyra", "Capella", "Rigel", "Mira", "Atlas"]
+IKIZ_RENKLERI = ["#8ea2ff", "#7fd6e8", "#c49bff", "#8fe0b0", "#ffb3d1", "#a8c7ff"]
+
+
+def _ikiz_kimlik(s: dict, alan: str, tr: dict) -> dict:
+    if "ikiz_kimlik" not in tr:
+        kullanilan = {t.get("ikiz_kimlik", {}).get("ad") for t in s["tracks"].values()}
+        renkler = {t.get("ikiz_kimlik", {}).get("renk") for t in s["tracks"].values()}
+        sira = list(s["tracks"]).index(alan)
+        ad = next((a for a in IKIZ_ADLARI[sira:] + IKIZ_ADLARI if a not in kullanilan), IKIZ_ADLARI[sira % len(IKIZ_ADLARI)])
+        renk = next((r for r in IKIZ_RENKLERI[sira:] + IKIZ_RENKLERI if r not in renkler), IKIZ_RENKLERI[0])
+        tr["ikiz_kimlik"] = {"ad": ad, "renk": renk, "dogum": dt.date.today().isoformat()}
+    return tr["ikiz_kimlik"]
+
+
+def _ikiz_ad(s: dict, alan: str) -> str:
+    tr = s["tracks"].get(alan)
+    return _ikiz_kimlik(s, alan, tr)["ad"] if tr else "İkizin"
+
+
+def ikiz_adlandir(sid: str, alan: str, ad: str) -> dict:
+    s = store.get(sid)
+    with store.lock(sid):
+        if alan not in s["tracks"]:
+            return {"ok": False, "mesaj": "Takımyıldız bulunamadı."}
+        if any(t.get("ikiz_kimlik", {}).get("ad") == ad for k, t in s["tracks"].items() if k != alan):
+            return {"ok": False, "mesaj": "Başka bir ikizin bu adı taşıyor."}
+        _ikiz_kimlik(s, alan, s["tracks"][alan])["ad"] = ad
+        emit(s, "İkiz", f"{s['tracks'][alan]['topic']} ikizinin yeni adı: {ad}.", "done", alan=alan)
+        store.save(s)
+    return {"ok": True}
+
+
 def gorunum(sid: str) -> dict | None:
     s = store.get(sid)
     if not s:
@@ -761,7 +797,7 @@ def gorunum(sid: str) -> dict | None:
     alanlar = []
     for alan, tr in s["tracks"].items():
         if "roadmap" not in tr:
-            alanlar.append({"alan": alan, "etiket": ALAN_ADI[_tur(alan)], "konu": tr["topic"], "hazir": False})
+            alanlar.append({"alan": alan, "etiket": ALAN_ADI[_tur(alan)], "konu": tr["topic"], "hazir": False, "ikiz_kimlik": _ikiz_kimlik(s, alan, tr)})
             continue
         gun = tr["twin"]["day"]
         gercek, ideal = _yildiz(tr, gun, set())
@@ -773,7 +809,8 @@ def gorunum(sid: str) -> dict | None:
             "ilerleme": {"gun": gun, "sen_yildiz": gercek, "rota_yildiz": ideal, "toplam_yildiz": toplam, "fark": ideal - gercek,
                          "seri": tr["twin"]["streak"], "risk": tr["twin"]["risk"], "risk_tr": RISK_TR[tr["twin"]["risk"]],
                          "parlaklik": _parlaklik(tr), "egri": _egri(tr)},
-            "ikiz": _ikiz_gorunum(s, tr),
+            "ikiz": {**_ikiz_gorunum(s, tr), **_ikiz_kimlik(s, alan, tr)},
+            "ikiz_kimlik": _ikiz_kimlik(s, alan, tr),
             "haftalar": tr["roadmap"]["weeks"], "kaynaklar": tr.get("kaynaklar"), "pratik": tr.get("pratik", [])[-30:],
             "kendi_kaynaklar": tr.get("kendi_kaynaklar", []), "birincil": tr.get("birincil"), "kaynak_kontrol": tr.get("kaynak_kontrol"),
             "beceriler": sorted({x["skill"] for x in tr["roadmap"]["tasks"]}),
@@ -806,7 +843,7 @@ def gorunum(sid: str) -> dict | None:
 
 
 def yeni_oturum(ad: str, akademik: str | None, hobi: str | None, dakika: int, zaman: str, son_tarihler: list[dict],
-                seviye: str = "baslangic", not_: str = "", sure: int = 21) -> str:
+                seviye: str = "baslangic", not_: str = "", sure: int = 21, avatar: int = 0) -> str:
     sid = uuid.uuid4().hex  # 128 bit
     tracks = {}
     if akademik:
@@ -814,9 +851,11 @@ def yeni_oturum(ad: str, akademik: str | None, hobi: str | None, dakika: int, za
     if hobi:
         tracks["hobi"] = {"topic": icerik.konu_adi(hobi)}
     s = {"id": sid, "name": ad or "Elif", "daily_minutes": dakika, "zaman": zaman, "baslangic": dt.date.today().isoformat(),
-         "son_tarihler": son_tarihler, "seviye": seviye, "not": not_[:200], "sure": sure, "tracks": tracks, "pratik": [], "durum": "kuruluyor", "olaylar": [], "bitenler": [], "coach": None,
+         "son_tarihler": son_tarihler, "seviye": seviye, "not": not_[:200], "sure": sure, "avatar": avatar, "tracks": tracks, "pratik": [], "durum": "kuruluyor", "olaylar": [], "bitenler": [], "coach": None,
          "oneriler": {}, "gorevler": [],
          "ogret": {"alan": "akademik" if akademik else "hobi", "kavram": None, "konu": "", "cumleler": [], "son": None}}
+    for alan, tr in tracks.items():
+        _ikiz_kimlik(s, alan, tr)
     first = s["ogret"]["alan"]
     s["ogret"]["konu"] = tracks[first]["topic"].split("·")[-1].strip()
     store.save(s)
@@ -1028,7 +1067,7 @@ def profil_guncelle(sid: str, alanlar: dict) -> dict:
             s["seviye"] = alanlar["seviye"]
             for alan, tr in s["tracks"].items():
                 if "roadmap" in tr:
-                    tr["kaynaklar"] = kaynak_avcisi.tara(tr["topic"], s["seviye"], s["daily_minutes"], s.get("not", ""))
+                    tr["kaynaklar"] = kaynak_avcisi.tara(tr["topic"], s["seviye"], s["daily_minutes"], s.get("not", ""), _tur(alan))
             emit(s, "Kaynak Avcısı", "Seviyen değişti; kaynakları yeniden puanladı.", "done")
             degisen.append("seviye")
         if degisen:
@@ -1050,6 +1089,7 @@ def takimyildiz_ekle(sid: str, tur: str, konu: str) -> dict:
         while anahtar in s["tracks"]:
             anahtar, n = f"{tur}-{n}", n + 1
         s["tracks"][anahtar] = {"topic": icerik.konu_adi(konu)}
+        _ikiz_kimlik(s, anahtar, s["tracks"][anahtar])
         s["durum"] = "kuruluyor"
         store.save(s)
     _calistir(kurulum, sid, [anahtar])

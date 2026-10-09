@@ -75,6 +75,7 @@ class OturumIstek(BaseModel):
     seviye: str = Field(default="baslangic", pattern="^(baslangic|orta|ileri)$")
     hedef_notu: str = Field(default="", max_length=200)
     sure: int = Field(default=21, ge=7, le=90)
+    avatar: int = Field(default=0, ge=0, le=3)
 
 
 class GunIstek(BaseModel):
@@ -120,7 +121,7 @@ def oturum_ac(r: OturumIstek):
         d = gv.denetle(alan_metni) if alan_metni.strip() else None
         if d and not d.izin:
             raise HTTPException(422, d.mesaj or "Bu alan kabul edilmedi")
-    sid = g.yeni_oturum(r.ad, r.akademik, r.hobi, r.dakika, r.zaman, [d.model_dump() for d in r.son_tarihler], r.seviye, r.hedef_notu, r.sure)
+    sid = g.yeni_oturum(r.ad, r.akademik, r.hobi, r.dakika, r.zaman, [d.model_dump() for d in r.son_tarihler], r.seviye, r.hedef_notu, r.sure, r.avatar)
     g._calistir(g.kurulum, sid)
     return {"session_id": sid}
 
@@ -287,6 +288,25 @@ def takimyildiz(sid: str, r: TakimyildizIstek):
     if not out["ok"]:
         raise HTTPException(409, out["mesaj"])
     return out
+
+
+class IkizAdIstek(BaseModel):
+    ad: str = Field(min_length=2, max_length=20)
+
+
+@app.patch("/v2/sessions/{sid}/tracks/{alan}/twin")
+def ikiz_adlandir(sid: str, alan: str, r: IkizAdIstek):
+    _var(sid)
+    ad = gv.temizle(r.ad).strip()
+    if not re.fullmatch(r"[A-Za-zÇĞİÖŞÜçğıöşü][A-Za-zÇĞİÖŞÜçğıöşü' -]{1,19}", ad):
+        raise HTTPException(422, "İkiz adı yalnızca harflerden oluşmalı (2–20 karakter).")
+    d = gv.denetle(ad)
+    if not d.izin:
+        raise HTTPException(422, d.mesaj or "Bu ad kabul edilmedi")
+    out = g.ikiz_adlandir(sid, alan, ad)
+    if not out["ok"]:
+        raise HTTPException(409, out["mesaj"])
+    return g.gorunum(sid)
 
 
 class PratikIstek(BaseModel):
