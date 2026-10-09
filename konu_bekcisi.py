@@ -25,6 +25,8 @@ Sadece şu JSON'u döndür: {"ilgili": bool, "neden": str}"""
 _BANKA = {
     "turev": ["turev", "limit", "egim", "fonksiyon", "teget", "ekstremum", "zincir", "carpim", "degisim", "artan", "azalan",
               "tepe", "cukur", "kural", "diferansiyel", "integral", "hiz", "nokta", "grafik", "konkav", "maksimum", "minimum"],
+    "veri": ["veri", "yapi", "dizi", "liste", "yigin", "kuyruk", "stack", "queue", "hash", "agac", "graf", "dugum", "isaretci",
+             "big", "karmasik", "erisim", "arama", "ekleme", "silme", "eleman", "indeks", "bfs", "dfs", "heap", "sirala", "algoritma", "cakisma"],
     "gitar": ["gitar", "akor", "tel", "perde", "ritim", "tempo", "metronom", "tirmal", "nota", "ses", "parmak", "sarki",
               "gecis", "melodi", "capo", "bilek", "tuning", "akort"],
 }
@@ -38,7 +40,8 @@ def _kokler(metin: str) -> set[str]:
 
 def _demo(konu: str, metin: str) -> dict:
     n = gv._norm(konu)
-    tip = "turev" if ("turev" in n or "kalkulus" in n) else "gitar" if "gitar" in n else None
+    tip = ("turev" if ("turev" in n or "kalkulus" in n) else "gitar" if "gitar" in n
+           else "veri" if ("veri yap" in n or "data struct" in n) else None)
     aranan = {k[:5] for k in (_BANKA.get(tip, []))} | _kokler(konu)
     ortak = aranan & _kokler(metin)
     if len(ortak) >= 1 and len(metin.split()) >= 4:

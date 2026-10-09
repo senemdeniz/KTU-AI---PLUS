@@ -154,6 +154,15 @@ _DEMO_EXAMS["türev"] = [
                  "Hayır. Türev işaret değiştirmiyorsa (örn. x³ için x = 0) tepe ya da çukur olmaz.",
                  ["sıfır", "tepe", "çukur"]),
 ]
+_DEMO_EXAMS["veri yap"] = [
+    ExamQuestion("q1", "Yığın (stack) ile kuyruk (queue) arasındaki fark nedir?",
+                 "Yığın LIFO: son giren ilk çıkar. Kuyruk FIFO: ilk giren ilk çıkar.", ["son", "ilk", "çık"]),
+    ExamQuestion("q2", "Hash tablosunda arama ortalama neden hızlıdır?",
+                 "Anahtar bir hash fonksiyonuyla doğrudan bir konuma çevrilir; ortalama O(1) erişim sağlar.", ["hash", "anahtar", "konum"]),
+    ExamQuestion("q3", "Bağlı liste ile dizi arasında ekleme ve erişim açısından fark nedir?",
+                 "Dizide indeksle erişim O(1) ama ortaya ekleme kaydırma ister; bağlı listede erişim O(n), baştan ekleme O(1).",
+                 ["erişim", "ekleme", "indeks"]),
+]
 _DEMO_EXAMS["gitar"] = [
     ExamQuestion("q1", "Akor geçişlerinde takılmamak için ne yapılır?",
                  "Yavaş tempoda, metronomla tekrar eder; parmakları bir sonraki akora önceden hazırlarız.",
@@ -166,6 +175,9 @@ _DEMO_EXAMS["gitar"] = [
                  ["perde", "komşu", "bas"]),
 ]
 _DEMO_HINTS_Q = {
+    "Yığın (stack) ile kuyruk (queue) arasındaki fark nedir?": "İkizin sıranın nasıl işlediğini bilmiyor. Önce kim çıkar, sonra kim? Bir örnekle anlat.",
+    "Hash tablosunda arama ortalama neden hızlıdır?": "Anahtarın nereye gideceğine kim karar veriyor? İkizine bunu anlattın mı?",
+    "Bağlı liste ile dizi arasında ekleme ve erişim açısından fark nedir?": "Dizide 5. elemana nasıl gidilir, bağlı listede nasıl? Maliyeti karşılaştır.",
     "Akor geçişlerinde takılmamak için ne yapılır?": "İkizin geçişleri nasıl çalışacağını bilmiyor. Tempoyu nasıl seçtiğini anlattın mı?",
     "Tırmalama kalıbında elin hareketi nasıl olmalı?": "Hareketin nereden geldiğini ve nasıl aktığını ikizine anlattın mı?",
     "Tellerin tıkırtılı ses vermesinin yaygın nedeni nedir?": "Parmağın tele nereye bastığını ve çevresindeki tellere ne olduğunu anlat.",
@@ -187,8 +199,9 @@ def _norm(s: str) -> str:
 
 
 def _demo_exam(topic: str) -> list[ExamQuestion]:
+    n = _norm(topic).replace("data structures", "veri yap")
     for key, exam in _DEMO_EXAMS.items():
-        if key in _norm(topic):
+        if key in n:
             return exam
     return _generic_exam(topic)
 
@@ -281,6 +294,14 @@ def hakem(exam: list[ExamQuestion], sentences: list[str], answers: list[TwinAnsw
     verdicts = [Verdict(**v) for v in out["verdicts"]]
     # Atıfsız "doğru" olamaz: ikiz kendi bilgisini sızdırmış demektir
     by_id = {a.question_id: a for a in answers}
+    q_by = {q.id: q for q in exam}
+    for v in verdicts:
+        q = q_by.get(v.question_id)
+        # İpucu referans cevabı söylüyorsa genel ipucuyla değiştir (Hakem cevabı vermez)
+        if v.hint and q and gv.ipucu_sizdiriyor_mu(v.hint, q.reference, sentences, q.question):
+            v.hint = "İkizin bunu bilmiyor ya da eksik biliyor. Konuyu kendi cümlenle, bir örnekle anlatmayı dene."
+        if v.result not in ("dogru", "eksik", "yanlis", "anlatilmadi"):
+            v.result = "anlatilmadi"
     for v in verdicts:
         if v.result == "dogru" and not by_id.get(v.question_id, TwinAnswer("", "", [])).cited:
             v.result, v.hint = "anlatilmadi", v.hint or "Bu bilgiyi ikizine sen anlatmadın."

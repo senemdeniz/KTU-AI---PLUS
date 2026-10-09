@@ -24,6 +24,24 @@ DESTEK_MESAJI = ("Yazdıkların beni düşündürdü. Kendini kötü hissediyors
                  "ulaşabilirsin. Bu konuyu öğrenme görevinin dışında tutuyorum.")
 
 
+import unicodedata
+
+_GORUNMEZ = re.compile("[\u200b-\u200f\u2028-\u202e\u2060-\u2064\u206a-\u206f\ufeff\u00ad\u180e]")
+_KONTROL = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+# Latin harflere benzeyen Kiril/Yunan karakterleri (gizleme saldırıları için)
+_BENZER = str.maketrans({"а": "a", "е": "e", "о": "o", "р": "p", "с": "c", "х": "x", "у": "y", "і": "i", "ј": "j", "ѕ": "s",
+                         "А": "A", "Е": "E", "О": "O", "Р": "P", "С": "C", "Х": "X", "Т": "T", "М": "M", "Н": "H", "К": "K", "В": "B",
+                         "ο": "o", "ρ": "p", "ν": "v", "α": "a", "ε": "e", "Ι": "I", "Ο": "O", "Α": "A"})
+
+
+def temizle(metin: str) -> str:
+    """Denetimden önce: Unicode normalleştirme (tam genişlik rakam vb.), görünmez/kontrol karakterlerini silme, benzer harf eşleme."""
+    m = unicodedata.normalize("NFKC", metin or "")
+    m = _GORUNMEZ.sub("", m)
+    m = _KONTROL.sub("", m)
+    return m.translate(_BENZER)
+
+
 def _norm(s: str) -> str:
     tr = str.maketrans({"İ": "i", "I": "i", "ı": "i", "Ş": "s", "ş": "s", "Ğ": "g", "ğ": "g",
                         "Ü": "u", "ü": "u", "Ö": "o", "ö": "o", "Ç": "c", "ç": "c"})
@@ -151,7 +169,7 @@ def hiz_siniri_asildi(oturum: str, simdi: float | None = None) -> bool:
 
 
 def denetle(metin: str, oturum: str | None = None) -> Denetim:
-    metin = metin or ""
+    metin = temizle(metin)
     if len(metin) > MAX_KARAKTER:
         return Denetim(False, engel="cok_uzun",
                        mesaj=f"Anlatımın çok uzun ({len(metin)} karakter). En fazla {MAX_KARAKTER} karakter: önemli kısımları seç.")
@@ -217,7 +235,7 @@ def odev_yaptirma_mi(metin: str) -> bool:
 
 
 def gorev_denetle(metin: str) -> Denetim:
-    metin = (metin or "").strip()
+    metin = temizle(metin).strip()
     if not metin:
         return Denetim(False, engel="bos", mesaj="Ekibe ne yaptırmak istediğini yaz.")
     if len(metin) > 400:
@@ -237,3 +255,12 @@ def gorev_denetle(metin: str) -> Denetim:
         return Denetim(False, engel="odev_yaptirma",
                        mesaj="Ödevini senin yerine yapamam; ama anlamana yardım edebilirim: konuyu birlikte çalışır, mini sınav hazırlar ya da teslim gününe göre planı düzenleriz.")
     return Denetim(True, [metin])
+
+
+def ipucu_sizdiriyor_mu(ipucu: str, referans: str, cumleler: list[str], soru: str = "") -> bool:
+    """Hakem ipucu, kullanıcının anlatmadığı referans içeriğini söylüyorsa True."""
+    bilinen = set()
+    for c in cumleler + [soru]:
+        bilinen |= _icerik_kelimeleri(c)
+    sizan = (_icerik_kelimeleri(ipucu) & _icerik_kelimeleri(referans)) - bilinen
+    return len(sizan) >= 3
