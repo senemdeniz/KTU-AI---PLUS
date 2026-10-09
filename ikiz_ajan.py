@@ -635,3 +635,83 @@ if __name__ == "__main__":
         print(f" seri={snap['streak']}  fark={snap['divergence']}  risk={snap['risk']}")
         print(" Koç:", coach_feedback(state)["message"])
         print(" Yeniden planlama tetiklendi mi?:", maybe_replan(state, rm, goal) is not None, "\n")
+
+
+# ---------------------------------------------------------------------------
+# Görüntü ve ses (çok kipli) — İkizine öğret için
+# ---------------------------------------------------------------------------
+# Görüntü: LLM_VISION_MODEL (yoksa LLM_MODEL) görüntü destekli bir model olmalı.
+#   Groq:   LLM_VISION_MODEL=<Groq'un görüntü destekli modeli>  (console.groq.com/docs/vision)
+#   Gemini: LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/  LLM_MODEL=<gemini modeli> (görüntü + ses)
+#   Claude: ANTHROPIC_API_KEY (görüntü destekler; ses desteklemez)
+# Ses: OpenAI uyumlu /audio/transcriptions (Groq: whisper-large-v3-turbo). STT_MODEL ile değiştirilebilir.
+
+def _taban() -> str:
+    return (os.environ.get("LLM_BASE_URL") or "https://router.huggingface.co/v1").rstrip("/")
+
+
+def yetenekler() -> dict:
+    p = provider()
+    gorsel_model = os.environ.get("LLM_VISION_MODEL") or (MODEL if p == "anthropic" else os.environ.get("LLM_MODEL"))
+    gorsel = p == "anthropic" or (p == "openai_compat" and bool(os.environ.get("LLM_VISION_MODEL") or "gemini" in (os.environ.get("LLM_MODEL") or "")))
+    stt = os.environ.get("STT_MODEL") or ("whisper-large-v3-turbo" if "groq.com" in _taban() else None)
+    ses = p == "openai_compat" and bool(stt)
+    return {"gorsel": gorsel, "gorsel_model": gorsel_model if gorsel else None, "ses": ses, "ses_model": stt if ses else None}
+
+
+def gorsel_json(system: str, metin: str, veri_b64: str, mime: str, max_tokens: int = 700) -> dict:
+    """Görüntü + metin → JSON. Görüntü sunucuda saklanmaz, yalnızca modele iletilir."""
+    import urllib.request, urllib.error
+    p = provider()
+    if p is None or not yetenekler()["gorsel"]:
+        raise LLMError("Görüntü destekli model yapılandırılmadı.")
+    if p == "anthropic":
+        try:
+            import anthropic
+            msg = anthropic.Anthropic().messages.create(model=MODEL, max_tokens=max_tokens, system=system, messages=[{"role": "user", "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": mime, "data": veri_b64}}, {"type": "text", "text": metin}]}])
+        except Exception as e:  # noqa: BLE001
+            raise LLMError(f"Anthropic görüntü çağrısı başarısız: {type(e).__name__}") from e
+        return _json_cikar("".join(b.text for b in msg.content if b.type == "text"))
+    key = os.environ.get("LLM_API_KEY") or os.environ.get("HF_TOKEN", "")
+    body = json.dumps({"model": os.environ.get("LLM_VISION_MODEL") or model_name(), "max_tokens": max_tokens, "temperature": 0.2,
+                       "messages": [{"role": "system", "content": system}, {"role": "user", "content": [
+                           {"type": "text", "text": metin}, {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{veri_b64}"}}]}]}).encode()
+    req = urllib.request.Request(_taban() + "/chat/completions", data=body, method="POST",
+                                 headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}", "User-Agent": "ikiz/2.0"})
+    try:
+        with urllib.request.urlopen(req, timeout=float(os.environ.get("LLM_TIMEOUT", "90"))) as r:
+            data = json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        raise LLMError(f"HTTP {e.code}: {e.read().decode('utf-8', 'replace')[:300].replace(key, '***') if key else ''}") from e
+    except Exception as e:  # noqa: BLE001
+        raise LLMError(f"görüntü modeline ulaşılamadı: {type(e).__name__}") from e
+    try:
+        return _json_cikar(data["choices"][0]["message"]["content"] or "")
+    except (KeyError, IndexError, TypeError) as e:
+        raise LLMError("görüntü modelinin cevabı beklenen biçimde değil") from e
+
+
+def ses_yaziya(ses: bytes, mime: str, dil: str = "tr") -> str:
+    """Ses kaydını yazıya döker (OpenAI uyumlu /audio/transcriptions, çok parçalı form)."""
+    import urllib.request, urllib.error, uuid as _uuid
+    y = yetenekler()
+    if not y["ses"]:
+        raise LLMError("Ses tanıma modeli yapılandırılmadı.")
+    uzanti = {"audio/webm": "webm", "audio/ogg": "ogg", "audio/mp4": "m4a", "audio/mpeg": "mp3", "audio/wav": "wav", "audio/x-wav": "wav"}.get(mime.split(";")[0], "webm")
+    sinir = "----ikiz" + _uuid.uuid4().hex
+    parcalar = []
+    for ad, deger in (("model", y["ses_model"]), ("language", dil), ("response_format", "json")):
+        parcalar.append(f'--{sinir}\r\nContent-Disposition: form-data; name="{ad}"\r\n\r\n{deger}\r\n'.encode())
+    parcalar.append(f'--{sinir}\r\nContent-Disposition: form-data; name="file"; filename="kayit.{uzanti}"\r\nContent-Type: {mime.split(";")[0]}\r\n\r\n'.encode() + ses + b"\r\n")
+    parcalar.append(f"--{sinir}--\r\n".encode())
+    key = os.environ.get("LLM_API_KEY") or os.environ.get("HF_TOKEN", "")
+    req = urllib.request.Request(_taban() + "/audio/transcriptions", data=b"".join(parcalar), method="POST",
+                                 headers={"Content-Type": f"multipart/form-data; boundary={sinir}", "Authorization": f"Bearer {key}", "User-Agent": "ikiz/2.0"})
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            return str(json.loads(r.read()).get("text", "")).strip()
+    except urllib.error.HTTPError as e:
+        raise LLMError(f"HTTP {e.code}: ses tanıma başarısız") from e
+    except Exception as e:  # noqa: BLE001
+        raise LLMError(f"ses tanıma servisine ulaşılamadı: {type(e).__name__}") from e

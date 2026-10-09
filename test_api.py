@@ -265,3 +265,27 @@ def test_kendi_kaynak_ve_guvenlik():
     assert k["ok"] and k["toplam"] >= 6
     assert c.delete(f"/v2/sessions/{sid}/sources/akademik/{kid}").json()["ok"]
     assert c.get(f"/v2/sessions/{sid}").json()["alanlar"][0]["birincil"] is None
+
+
+def test_gorsel_ve_ses_dogrulama(monkeypatch):
+    import base64
+    import ikiz_ajan as ia
+    sid = c.post("/v2/sessions", json={"akademik": "Veri Yapıları"}).json()["session_id"]
+    jpeg = base64.b64encode(b"\xff\xd8\xff" + b"0" * 2000).decode()
+    # demo modunda görüntü kapalı → anlaşılır hata
+    r = c.post(f"/v2/sessions/{sid}/teach/image", json={"alan": "akademik", "mime": "image/jpeg", "veri": jpeg})
+    assert r.status_code == 409 and "görüntü destekli" in r.json()["detail"]
+    # sahte imza reddedilir
+    sahte = base64.b64encode(b"<svg onload=alert(1)>" + b"0" * 100).decode()
+    assert c.post(f"/v2/sessions/{sid}/teach/image", json={"alan": "akademik", "mime": "image/jpeg", "veri": sahte}).status_code == 422
+    assert c.post(f"/v2/sessions/{sid}/teach/image", json={"alan": "akademik", "mime": "image/svg+xml", "veri": jpeg}).status_code == 422
+    # model varmış gibi: kişisel veri içeren cümle atılır, cümleler ikize eklenmez
+    monkeypatch.setattr(ia, "yetenekler", lambda: {"gorsel": True, "gorsel_model": "x", "ses": True, "ses_model": "y"})
+    monkeypatch.setattr(ia, "gorsel_json", lambda *a, **k: {"cumleler": ["Bağlı listede her düğüm sonrakini işaret eder.", "Ali'nin numarası 0532 123 45 67."], "uyari": None})
+    r = c.post(f"/v2/sessions/{sid}/teach/image", json={"alan": "akademik", "mime": "image/jpeg", "veri": jpeg}).json()
+    assert r["cumleler"] == ["Bağlı listede her düğüm sonrakini işaret eder."] and r["cikarilan"] == 1
+    assert c.get(f"/v2/sessions/{sid}").json()["ogret"]["cumleler"] == []
+    monkeypatch.setattr(ia, "ses_yaziya", lambda ses, mime, dil="tr": "Yığın son giren ilk çıkar mantığıyla çalışır.")
+    r = c.post(f"/v2/sessions/{sid}/teach/audio", json={"mime": "audio/webm;codecs=opus", "veri": base64.b64encode(b"0" * 3000).decode()}).json()
+    assert r["ok"] and "Yığın" in r["metin"]
+    assert "yetenekler" in c.get("/health").json()

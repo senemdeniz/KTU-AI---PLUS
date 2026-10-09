@@ -50,7 +50,8 @@ async def koruma(request: Request, call_next):
             return JSONResponse({"detail": "Çok fazla istek. Biraz bekle."}, status_code=429, headers={"Retry-After": "30"})
         k.append(simdi)
         _SINIR[anahtar] = k
-    if int(request.headers.get("content-length") or 0) > GOVDE_LIMIT:
+    sinir = 6_000_000 if request.url.path.endswith("/teach/image") else 10_000_000 if request.url.path.endswith("/teach/audio") else GOVDE_LIMIT
+    if int(request.headers.get("content-length") or 0) > sinir:
         return JSONResponse({"detail": "İstek çok büyük."}, status_code=413)
     resp = await call_next(request)
     resp.headers.update({"X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer",
@@ -108,7 +109,7 @@ def _var(sid: str) -> dict:
 
 @app.get("/health")
 def health():
-    return {"ok": True, "surum": "2.0", "demo": ia.is_mock(), "saglayici": ia.provider(), "model": ia.model_name()}
+    return {"ok": True, "surum": "2.0", "demo": ia.is_mock(), "saglayici": ia.provider(), "model": ia.model_name(), "yetenekler": ia.yetenekler()}
 
 
 @app.post("/v2/sessions")
@@ -387,6 +388,53 @@ def kaynak_kontrol(sid: str, r: KontrolIstek):
     out = g.kaynak_kontrol(sid, r.alan)
     if not out["ok"]:
         raise HTTPException(404, out["mesaj"])
+    return out
+
+
+
+_GORSEL_IMZA = {"image/jpeg": b"\xff\xd8\xff", "image/png": b"\x89PNG", "image/webp": b"RIFF"}
+
+
+class GorselIstek(BaseModel):
+    alan: str = Field(max_length=20)
+    mime: str = Field(pattern="^image/(jpeg|png|webp)$")
+    veri: str = Field(max_length=5_600_000)
+
+
+@app.post("/v2/sessions/{sid}/teach/image")
+def ogret_gorsel(sid: str, r: GorselIstek):
+    _var(sid)
+    import base64, binascii
+    try:
+        ham = base64.b64decode(r.veri, validate=True)
+    except (binascii.Error, ValueError):
+        raise HTTPException(422, "Görüntü okunamadı.")
+    if not ham.startswith(_GORSEL_IMZA[r.mime]) or len(ham) > 4_000_000:
+        raise HTTPException(422, "Geçerli bir JPEG/PNG/WebP görüntü yükle (en fazla 4 MB).")
+    out = g.gorselden_cumleler(sid, r.alan, r.veri, r.mime)
+    if not out["ok"]:
+        raise HTTPException(409, out["mesaj"])
+    return out
+
+
+class SesIstek(BaseModel):
+    mime: str = Field(pattern="^audio/(webm|ogg|mp4|mpeg|wav|x-wav)(;.*)?$", max_length=60)
+    veri: str = Field(max_length=9_500_000)
+
+
+@app.post("/v2/sessions/{sid}/teach/audio")
+def ogret_ses(sid: str, r: SesIstek):
+    _var(sid)
+    import base64, binascii
+    try:
+        ham = base64.b64decode(r.veri, validate=True)
+    except (binascii.Error, ValueError):
+        raise HTTPException(422, "Ses kaydı okunamadı.")
+    if len(ham) > 7_000_000 or len(ham) < 1000:
+        raise HTTPException(422, "Ses kaydı çok uzun ya da çok kısa.")
+    out = g.sesten_metin(sid, ham, r.mime)
+    if not out["ok"]:
+        raise HTTPException(409, out["mesaj"])
     return out
 
 
