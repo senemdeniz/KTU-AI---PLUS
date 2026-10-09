@@ -1,94 +1,56 @@
-# 🪞 İkiz — seninle birlikte gelişen öğrenme ikizi
+# İkiz — seninle birlikte gelişen öğrenme ikizi
 
-> **Agentic AI in Education** hackathon projesi
+> **Agentic AI in Education** hackathon projesi. İki alan: **Akademik** (üniversite dersleri) ve **Hobiler**.
 
-İkiz, kişisel gelişim hedefin için senin bir **dijital ikizini** oluşturur. Ajan CV'ni, hobilerini ve hedeflerini okur, sana en uygun **tek** hedefi gerekçesiyle seçer ve gün gün bir yol haritası kurar. Sonra iki ikiz yola çıkar:
+İkiz, hedefin için bir **dijital ikiz** kurar: *Gerçek Sen* yalnızca gerçekten bitirdiklerinle ilerler, *İstikrarlı Sen* planı her gün uygulasaydın olacağın yerdedir. Aradaki fark bir **yıldız** farkıdır (her tamamlanan görev bir yıldız). Bir **ajan ekibi (Gözlemevi)** bu farkı izler, plan tutmuyorsa planı kendisi değiştirir ve yaptığı her şeyi canlı bir akışta gösterir.
 
-- **İstikrarlı Sen:** planı her gün uygulasaydın nerede olacağın.
-- **Gerçek Sen:** yalnızca gerçekten bitirdiğin görevlerle büyüyen ikizin.
+## Çok-ajanlı sistem (neden çok ajan?)
 
-Aradaki fark açıldığında ajan seni suçlamaz; **planı sorgular** ve kalan günleri kendi kararıyla yeniden düzenler. Öğretme görevlerinde ise öğrendiğini ikizine anlatırsın; o da meraklı bir akran gibi soru sorar ve anlatımını puanlar.
+Çok ajan burada süs değil; **bilgi ayrımı, bağımsız doğrulama ve denetlenebilirlik** için var.
 
-![İkiz paneli](docs/img/5_yeniden_plan.png)
+| Ajan | Tür | Görev |
+|---|---|---|
+| Gözlemevi | LLM + kod | Orkestratör; görevleri dağıtır, büyük kararları kullanıcı onayına sunar |
+| Astronom → Kutup Yıldızı → Haritacı | LLM | Kurulum hattı: profil, tek ideal hedef, 21 günlük harita |
+| Gözcü | **kod** | İkizi ve riski deterministik hesaplar (`ikiz_ajan.py`) |
+| Yörüngeci | LLM | Plan gerideyse en hafif müdahaleyi seçer; küçüğü uygular, büyüğünü onaya sunar |
+| Rehber | LLM | Suçlamadan tek net adım önerir |
+| Kaşif · İkiz · Hakem | LLM | *İkizine öğret*: Kaşif referans cevabı saklar, İkiz yalnızca kullanıcının cümlelerini bilir, Hakem bağımsız doğrular |
 
-## Neden "agentic"?
+Üç akış: (1) kurulum hattı, (2) Ajan Akışı: Gözcü → Gözlemevi kararı → Yörüngeci → Rehber, (3) *İkizine öğret*: kısıtlı bilgi ile sınav.
 
-İkiz tek seferlik bir sohbet botu değildir. Ajan, kullanıcının adım adım yönlendirmesine ihtiyaç duymadan şu kararları kendisi verir:
+## Güvenlik ve etik (`guvenlik.py`)
 
-| Karar | Nerede |
-|---|---|
-| 3 aday hedef üretip puanlar, birini gerekçesiyle seçer | `select_goal` |
-| Hedefi günlük süreye uyan görevlere böler, zorluğu kademeli artırır | `build_roadmap` |
-| Her günün sonunda riski ölçer (momentum, dengeli, kayıyor, risk altında) | `advance_day` |
-| Risk durumuna göre feedback stratejisini değiştirir | `coach_feedback` |
-| Plan tutmadığında müdahale seçer (kısalt, sırala, uzat, tür değiştir, kapsam daralt) | `maybe_replan` |
-| Kullanıcının seviyesinde kalan bir akran olarak öğretme anlatımını değerlendirir | `twin_talk` |
+Kişisel veri (TC kimlik, telefon, e-posta, IBAN, kart) engellenir; prompt injection ve zararlı içerik denetlenir; kullanıcı metni modele "güvenilmez veri" olarak verilir; ödev yaptırma reddedilir (ekip anlamana yardım eder, ödevi yapmaz); boyut ve hız sınırı vardır; İkiz'in yapay zekâ olduğu belirtilir; "Verilerimi sil" tüm oturumu siler. Bu kural tabanlı **ilk savunma hattıdır**; üretimde bir moderasyon modeliyle desteklenmelidir.
 
-İkizlerin gelişimi bilerek **deterministik kodla** hesaplanır, LLM'e bırakılmaz. Böylece demo her seferinde tutarlı sonuç verir; LLM yalnızca karar ve dil üretir.
-
-## Hızlı başlangıç
+## Çalıştırma
 
 ```bash
-git clone <repo-url> && cd ikiz
 pip install -r requirements.txt
-streamlit run app.py
+uvicorn server:app --port 8000          # API (demo modunda anahtarsız çalışır)
+
+cd mobile && npm install
+EXPO_PUBLIC_API_URL=http://localhost:8000 npx expo start --web   # ya da telefonda Expo Go
 ```
 
-API anahtarı olmadan uygulama **demo modunda** çalışır: ajanlar hazır, gerçekçi cevaplar döndürür ve tüm akış uçtan uca denenebilir.
+**Model sağlayıcısı** (yalnızca sunucu ortam değişkeni; anahtarı asla sohbete/koda yazma):
 
-Gerçek modelle çalıştırmak için:
-
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-streamlit run app.py
-```
-
-## Ekranlar
-
-| Seni tanıyalım | Ajanın seçimi |
+| Değişken | Anlamı |
 |---|---|
-| ![](docs/img/1_onboarding.png) | ![](docs/img/2_hedef.png) |
-| **Risk tespiti** | **İkizine öğret** |
-| ![](docs/img/4_risk.png) | ![](docs/img/6_ogret.png) |
+| `ANTHROPIC_API_KEY` | Claude |
+| `HF_TOKEN` (+ `LLM_MODEL`) | Hugging Face router (OpenAI uyumlu, `https://router.huggingface.co/v1`) |
+| `LLM_API_KEY` + `LLM_BASE_URL` | Herhangi bir OpenAI uyumlu uç nokta |
+| `LLM_PROVIDER=mock` | Demo modunu zorla |
+| `IKIZ_DB` | Kalıcı SQLite yolu (Railway'de volume'a bağla) |
+| `AJAN_GECIKME` | Akıştaki adım gecikmesi, sn (varsayılan 0.7) |
 
-## Proje yapısı
+Hiçbiri yoksa **demo modu** çalışır: içerik elle yazılmış (Türev ve Gitar için özel), akış ve karar mantığı gerçektir.
 
-```
-app.py            Streamlit arayüzü: onboarding → hedef kararı → ikiz paneli
-ikiz_ajan.py      Veri şeması, ikiz gelişim mantığı, 6 ajan prompt'u, LLM çağrısı + demo mock'ları
-DEMO.md           Jüri sunumu için 3 dakikalık demo senaryosu
-docs/img/         Ekran görüntüleri
-```
+Testler: `python -m pytest -q` (17 test). API sözleşmesi: [`docs/API.md`](docs/API.md). Jüri anlatımı: [`DEMO.md`](DEMO.md).
 
-`ikiz_ajan.py` arayüzden bağımsızdır; tek başına çalıştırıldığında komut satırında bir simülasyon yapar:
+## Bilinen sınırlar
 
-```bash
-python ikiz_ajan.py
-```
-
-## Pedagojik dayanak
-
-- **Akran seviyesinde öğrenme arkadaşı:** İkiz, kullanıcıyla aynı seviyeden başlar ve onun hızında ilerler. Araştırmalar, akademik olarak zorlanan öğrencilerin düşük yetkinlikli bir öğrenme arkadaşıyla çalıştığında öz yeterliklerinin arttığını gösteriyor.
-- **Öğreterek öğrenme:** Her 3-4 günde bir kullanıcı öğrendiğini ikizine anlatır. Bu görevler ikize %25 daha fazla gelişim kazandırır.
-- **İstikrar odaklı geri bildirim:** Koç kullanıcıyı değil planı sorgular; seri bozulduğunda 5 dakikalık mini görevle geri dönüşü kolaylaştırır.
-
-## Veri gizliliği
-
-CV ve hedefler yalnızca oturum boyunca bellekte tutulur, diske yazılmaz. Gerçek modda yalnızca ajan çağrıları için model sağlayıcısına gönderilir. Üretim sürümünde KVKK kapsamında açık rıza ve veri silme akışı eklenmelidir.
-
-## Yayına alma (canlı demo linki)
-
-1. Repoyu GitHub'a gönder.
-2. [share.streamlit.io](https://share.streamlit.io) üzerinden repoyu seç, ana dosya olarak `app.py`'yi ver.
-3. Canlı mod istiyorsan **Secrets** bölümüne `ANTHROPIC_API_KEY = "..."` ekle. Eklemezsen uygulama demo modunda açılır.
-
-## Sonraki adımlar
-
-- Durumu kalıcı hale getirmek (SQLite veya Supabase) ve çok günlük gerçek kullanım
-- Gerçek kaynak önerileri için web araması aracı
-- Bildirimlerle proaktif hatırlatma
-- Akran ikizleri: aynı hedefteki kullanıcıların ikizlerinin karşılaştırılması
-
-## Lisans
-
-MIT
+- LLM yolu (Claude / Hugging Face) gerçek servislere karşı henüz denenmedi; yalnızca demo modu ve sahte uç nokta test edildi. Hugging Face'te JSON çıktı güvenilirliği ve Türkçe kalite modele göre denenmelidir. Ücretsiz HF hesaplarında aylık kredi yoktur (PRO: aylık 2$).
+- *Görev ver* yönlendirmesi anahtar kelimelidir; `kaynak` yalnızca kaynak türü önerir, bağlantı uydurmaz.
+- Eski Streamlit demosu (`app.py`) ve `examples_yks_ayt_matematik/` örnek içerik paketi olarak duruyor; ana ürün değildir.
+- 18 yaş altı için veli onayı akışı yok; destek hattı numaraları (112, ALO 183) yayından önce doğrulanmalı.

@@ -4,3 +4,9 @@ __pycache__/
 .streamlit/secrets.toml
 .venv/
 .DS_Store
+
+ikiz.db
+mobile/node_modules/
+mobile/dist/
+mobile/.expo/
+*.db
