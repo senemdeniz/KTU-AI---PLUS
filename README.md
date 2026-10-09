@@ -2,7 +2,13 @@
 
 > **Agentic AI in Education** hackathon projesi. İki alan: **Akademik** (üniversite dersleri) ve **Hobiler**.
 
-İkiz, hedefin için bir **dijital ikiz** kurar: *Gerçek Sen* yalnızca gerçekten bitirdiklerinle ilerler, *İstikrarlı Sen* planı her gün uygulasaydın olacağın yerdedir. Aradaki fark bir **yıldız** farkıdır (her tamamlanan görev bir yıldız). Bir **ajan ekibi (Gözlemevi)** bu farkı izler, plan tutmuyorsa planı kendisi değiştirir ve yaptığı her şeyi canlı bir akışta gösterir.
+İkiz'de gökyüzünde üç şey vardır:
+
+- **Sen:** bitirdiğin her görev bir yıldız yakar.
+- **Rota:** planı hiç aksatmasaydın bugün olacağın yer (kesikli çizgi). Aradaki fark "rotanın kaç yıldız gerisindesin" sorusunun cevabıdır.
+- **İkizin:** boş doğar ve **yalnızca senin öğrettiklerini bilir**. Plandaki her "anlat" kavramı ikizinin bir yıldızıdır: öğretmediysen sönük, kısmen doğruysa parlak, tamamen doğruysa halkalı. İkizin hiçbir zaman senden önde olamaz; sen öğrettikçe büyür.
+
+Bir **ajan ekibi (Gözlemevi)** seni rotanla karşılaştırır, plan tutmuyorsa planı kendisi değiştirir ve yaptığı her şeyi canlı bir akışta gösterir.
 
 ## Çok-ajanlı sistem (neden çok ajan?)
 

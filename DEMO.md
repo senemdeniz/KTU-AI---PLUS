@@ -1,14 +1,15 @@
-# Jüri demosu (4 dakika)
+# Jüri demosu (4–5 dakika)
 
-Sunucuyu `AJAN_GECIKME=0.7` ile aç; akış okunabilir hızda akar. Persona: **Elif**, Kalkülüs I · Türev + Gitar.
+Çalıştır: `python3 -m uvicorn server:app --port 8000` → tarayıcıda `http://127.0.0.1:8000`. Akış okunabilir hızda aksın diye `AJAN_GECIKME=0.7` (varsayılan). Persona: **Elif**, Veri Yapıları.
 
-1. **Kurulum (30 sn).** İki alanı seç, "Ekibi çağır". Astronom → Kutup Yıldızı → Haritacı sırayla çalışır; her adım ekranda akar. *"Her ajan kendi işini yapar, hepsi kayıt altında."*
-2. **Gökyüzü (20 sn).** Takımyıldız, parlaklık, ikizle yıldız farkı.
-3. **Otonom döngü (60 sn).** İkizin sekmesi → "5 gün kopuk". Ekip sekmesinde: Gözcü ölçer → Gözlemevi "hatırlatma yetmez, planı değiştiriyorum" der → Yörüngeci devralır → Rehber suçlamadan tek adım önerir. *Küçük değişiklik otomatik, büyük değişiklik onaya.*
-4. **Görev ver (45 sn).** "Gelecek hafta vizem var, planı ona göre ayarla" → iki ajana bölünür, onay kartı çıkar, Onayla. Sonra **"Ödevimi yap"** → reddedilir; ekip anlamana yardım eder.
-5. **Konu Bekçisi (20 sn).** İkizine konu dışı bir cümle yaz ("dün film izledim") → Konu Bekçisi engeller, ikize ulaşmaz.
-6. **İkizine öğret (sesli de olur) (75 sn).** İki cümle anlat, "İkizini sınava sok". İkiz yalnızca cümlelerini bilir; Hakem cevabı söylemez, ipucu verir. Telefon numarası yaz → engellenir. "Hepsini sil".
+1. **Profil (30 sn).** "İkizini oluştur" → konu: Veri Yapıları, seviye: Yeni başlıyorum, 30 dk. Onay kutusu: ajanlar ve ikiz yapay zekâdır, veriler silinebilir.
+2. **Gökyüzün kuruluyor (30 sn).** Astronom → Kutup Yıldızı → Haritacı → Kaynak Avcısı → Gözcü → Rehber sırayla çalışır; her adım ekranda akar. *"Her ajanın tek işi var, hepsi kayıt altında."*
+3. **Yol haritası ve kaynak (30 sn).** 21 günlük plan; Kaynak Avcısı 6 kaynağı seviye, süre ve ücrete göre puanlayıp tek birincil kaynak seçer. Bağlantıları model değil kod verir (elle doğrulanmış liste).
+4. **Rota ve otonom döngü (60 sn).** Bugün → "Canlı demo kontrolü": 5 gün, %25. Gözcü seni **rotanla** karşılaştırır → Gözlemevi "hatırlatma yetmez" der → Yörüngeci planı hafifletir → Rehber tek adım önerir. *Küçük değişiklik otomatik, büyüğü onaya.*
+5. **Ekibe görev ver (45 sn).** "Gelecek hafta vizem var, planı ona göre ayarla" → iki ajana bölünür, onay kartı çıkar, Onayla. Sonra **"Ödevimi yap"** → reddedilir.
+6. **İkizin (75 sn).** İkizin sekmesi: ikiz **%0**'dan başlar; rota ilerlese de ikiz sen öğretmeden büyümez, senden önde olamaz. İkizine öğret → kavram: bağlı liste → anlat (sesle de olur) → "İkizini sınava sok". İkiz yalnızca senin cümlelerini bilir; Hakem cevabı söylemez, ipucu verir. İkizin gökyüzünde ilk yıldız yanar.
+7. **Güvenlik (20 sn).** Konu dışı bir cümle ("dün film izledim") → Konu Bekçisi durdurur. Telefon numarası → engellenir. "Hepsini sil".
 
-**Neden çok ajan?** Kaşif'in cevabı İkiz'den *saklanır* (bilgi ayrımı), Hakem İkiz'den *bağımsız* doğrular, her karar akışta *denetlenebilir*. Tek bir model aynı anda hem cevabı bilip hem bilmiyormuş gibi davranamaz.
+**Neden çok ajan?** Kaşif'in referans cevabı İkiz'den *saklanır* (bilgi ayrımı), Hakem İkiz'den *bağımsız* doğrular, Konu Bekçisi anlatımı ayrıca denetler, her karar akışta *denetlenebilir*. Tek bir model aynı anda hem cevabı bilip hem bilmiyormuş gibi davranamaz.
 
-**Dürüst notlar:** demo modunda içerik hazır, mantık gerçek; LLM yolu gerçek servislerde henüz denenmedi.
+**Dürüst notlar:** demo modunda metinler hazır, akış ve karar mantığı gerçek. Canlı model için `LLM_API_KEY` + `LLM_BASE_URL` (örn. Groq) ya da `HF_TOKEN`; önce `python3 llm_kontrol.py`.
