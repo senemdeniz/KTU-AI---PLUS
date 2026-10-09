@@ -289,3 +289,39 @@ def test_gorsel_ve_ses_dogrulama(monkeypatch):
     r = c.post(f"/v2/sessions/{sid}/teach/audio", json={"mime": "audio/webm;codecs=opus", "veri": base64.b64encode(b"0" * 3000).decode()}).json()
     assert r["ok"] and "Yığın" in r["metin"]
     assert "yetenekler" in c.get("/health").json()
+
+
+def test_konuya_ozgu_kaynak_stratejisi():
+    sid = c.post("/v2/sessions", json={"hobi": "İspanyolca", "akademik": "Veri Yapıları"}).json()["session_id"]
+    al = {a["konu"]: a["kaynaklar"] for a in c.get(f"/v2/sessions/{sid}").json()["alanlar"]}
+    isp, veri = al["İspanyolca"], next(v for k, v in al.items() if "Veri" in k)
+    assert isp["strateji"]["sinif"] == "dil" and isp["secim"]["dil"].startswith("Türkçe") and isp["secim"]["rol"] == "1. Türkçe temel"
+    roller = [x["rol"] for x in isp["alternatifler"]]
+    assert roller.index("2. İngilizce köprü") < roller.index("3. Hedef dilde")
+    # teknik konuda kalite önce: Türkçe ders birincil değil, destek
+    assert veri["strateji"]["sinif"] == "teknik" and not veri["secim"]["dil"].startswith("Türkçe")
+    assert any(x["rol"] == "Türkçe destek" for x in veri["alternatifler"])
+    import kaynak_avcisi as ka
+    assert ka.konu_sinifi("Gitar", "hobi") == "beceri" and ka.konu_sinifi("Almanca") == "dil"
+    alm = ka.tara("Almanca", alan_turu="hobi")
+    assert alm["platformlar"][0]["dil"] == "Türkçe" and all("Khan" not in p["ad"] for p in alm["platformlar"])
+    ml = ka.tara("Makine Öğrenmesi", alan_turu="akademik")
+    assert ml["platformlar"][0]["dil"] == "İngilizce"
+
+
+def test_her_konunun_kendi_ikizi():
+    sid = c.post("/v2/sessions", json={"akademik": "Veri Yapıları", "hobi": "Gitar", "avatar": 2}).json()["session_id"]
+    v = c.get(f"/v2/sessions/{sid}").json()
+    assert v["profil"]["avatar"] == 2
+    adlar = [a["ikiz_kimlik"]["ad"] for a in v["alanlar"]]
+    assert len(set(adlar)) == 2
+    c.post(f"/v2/sessions/{sid}/tracks", json={"tur": "hobi", "konu": "İspanyolca"})
+    v = c.get(f"/v2/sessions/{sid}").json()
+    assert len({a["ikiz_kimlik"]["ad"] for a in v["alanlar"]}) == 3
+    alan = v["alanlar"][0]["alan"]
+    v = c.patch(f"/v2/sessions/{sid}/tracks/{alan}/twin", json={"ad": "Nova"}).json()
+    assert v["alanlar"][0]["ikiz_kimlik"]["ad"] == "Nova" and v["alanlar"][0]["ikiz"]["ad"] == "Nova"
+    assert c.patch(f"/v2/sessions/{sid}/tracks/{alan}/twin", json={"ad": "<script>"}).status_code == 422
+    assert c.patch(f"/v2/sessions/{sid}/tracks/{v['alanlar'][1]['alan']}/twin", json={"ad": "Nova"}).status_code == 409
+    # bir ikize öğretilen diğerine geçmez
+    assert all(a["ikiz"]["ogretilen"] == 0 for a in v["alanlar"][1:])
