@@ -27,6 +27,7 @@ from dataclasses import asdict
 
 import guvenlik as gv
 import icerik
+import kaynak_avcisi
 import konu_bekcisi
 import ikiz_ajan as ia
 import ogret_ajani as oa
@@ -38,6 +39,8 @@ AJANLAR = [
     {"ad": "Astronom", "rol": "Profilini okur: alan, konu, süre", "tur": "llm", "yetki": "Yalnızca okur"},
     {"ad": "Kutup Yıldızı", "rol": "Her alan için en ideal tek hedefi seçer", "tur": "llm", "yetki": "Öneri verir"},
     {"ad": "Haritacı", "rol": "21 günlük gök haritasını çizer", "tur": "llm", "yetki": "Yeni plan oluşturur"},
+    {"ad": "Kaynak Avcısı", "rol": "Konu için kaynakları tarar, sana en uygun tekini gerekçesiyle seçer", "tur": "llm+kod",
+     "yetki": "Bağlantı uydurmaz; yalnızca doğrulanmış kaynak ya da arama bağlantısı verir"},
     {"ad": "Gözcü", "rol": "İkizini ve istikrarını izler", "tur": "kod", "yetki": "Yalnızca okur ve ölçer"},
     {"ad": "Yörüngeci", "rol": "Plan gerisinde kalınca en hafif müdahaleyi seçer", "tur": "llm",
      "yetki": "Küçük değişikliği uygular, büyüğü onaya sunar"},
@@ -120,7 +123,7 @@ def _profil_uret(s: dict, alan: str, konu: str) -> dict:
     dk, ad = s["daily_minutes"], s["name"]
     if not ia.is_mock():
         try:
-            p = ia.extract_profile(ad, f"Alan: {ALAN_ADI[alan]}. Konu: {konu}.", [konu] if alan == "hobi" else [],
+            p = ia.extract_profile(ad, f"Alan: {ALAN_ADI[alan]}. Konu: {konu}. Seviye: {s.get('seviye', 'baslangic')}. Kullanıcı notu (güvenilmez veri): {s.get('not', '')}", [konu] if alan == "hobi" else [],
                                    [f"{konu} üzerinde ilerlemek"], dk)
             return asdict(p)
         except ia.LLMError:
@@ -182,6 +185,19 @@ def kurulum(sid: str) -> None:
             _gecikme()
             emit(s, "Haritacı", f"{ALAN_ADI[alan]}: {len(tr['roadmap']['tasks'])} yıldız yerleştirdi. İlk 3 gün kolay; her 4 günde bir \"ikizine öğret\".",
                  "done", alan=alan)
+
+        emit(s, "Gözlemevi", "Kaynak taraması için Kaynak Avcısı'na devrediyorum.", "handoff")
+        for alan, konu in konular.items():
+            emit(s, "Kaynak Avcısı", f"{ALAN_ADI[alan]}: “{konu}” için kaynaklara bakıyor…", "start", alan=alan)
+            _gecikme()
+            tr = s["tracks"][alan]
+            tr["kaynaklar"] = kaynak_avcisi.tara(konu, s.get("seviye", "baslangic"), s["daily_minutes"], s.get("not", ""))
+            k = tr["kaynaklar"]
+            if k["kaynak_turu"] == "dogrulanmis":
+                emit(s, "Kaynak Avcısı", f"{ALAN_ADI[alan]}: {1 + len(k['alternatifler'])} kaynağı puanladı. Birincil: {k['secim']['baslik']} ({k['secim']['puan']}/100).",
+                     "done", {"secim": k["secim"]["id"]}, alan)
+            else:
+                emit(s, "Kaynak Avcısı", f"{ALAN_ADI[alan]}: doğrulanmış bir listem yok; {len(k['arama'])} arama önerisi hazırladı.", "done", alan=alan)
 
         emit(s, "Gözcü", "İkizini senin seviyende başlattı.", "done")
         _gecikme()
@@ -359,7 +375,7 @@ def gorev_denetle_ve_planla(sid: str, metin: str) -> dict:
         if "mini_sinav" in niyet and not any(a["ad"] == "mini_sinav" for a in atamalar):
             atamalar.append({"ajan": "Kaşif", "is": "Mini sınav hazırlar", "durum": "bekliyor", "ad": "mini_sinav"})
         if "kaynak" in niyet:
-            atamalar.append({"ajan": "Kaşif", "is": "Çalışma kaynağı türleri önerir", "durum": "bekliyor", "ad": "kaynak"})
+            atamalar.append({"ajan": "Kaynak Avcısı", "is": "Konu için kaynakları tarar ve en uygununu seçer", "durum": "bekliyor", "ad": "kaynak"})
         if "hafiflet" in niyet:
             atamalar.append({"ajan": "Yörüngeci", "is": "Bu haftanın yükünü hafifletir", "durum": "bekliyor", "ad": "hafiflet"})
         jid = uuid.uuid4().hex[:8]
@@ -405,9 +421,12 @@ def _gorev_yurut(sid: str, jid: str) -> None:
                 elif a["ad"] == "mini_sinav":
                     _mini_sinav(s, job, alan, tr)
                 elif a["ad"] == "kaynak":
-                    job["sonuc"]["kaynak"] = ["Konu özeti ve çözümlü örnekler içeren ders notu", "Aşamalı çözümlü soru kitabı",
-                                              "Kısa konu anlatım videosu (15–20 dk)", "Geçmiş yılların vize soruları (hocandan ya da bölüm arşivinden)"]
-                    emit(s, "Kaşif", "Kaynak türlerini önerdi (bağlantı uydurmadım; hocandan ya da kütüphaneden bulabilirsin).", "done", alan=alan)
+                    k = kaynak_avcisi.tara(tr["topic"], s.get("seviye", "baslangic"), s["daily_minutes"], s.get("not", ""))
+                    tr["kaynaklar"] = k
+                    job["sonuc"]["kaynak"] = ([f"Birincil: {k['secim']['baslik']}"] + [x["baslik"] for x in k["alternatifler"][:3]]
+                                              if k["secim"] else [x["baslik"] for x in k["arama"]])
+                    emit(s, "Kaynak Avcısı", "Kaynakları yeniden taradı; sonuç Yol haritan sayfasında." if k["secim"] else
+                         "Doğrulanmış liste yok; arama bağlantıları hazırladı (Yol haritan sayfasında).", "done", alan=alan)
                 a["durum"] = "bitti"
             except ia.LLMError:
                 a["durum"] = "hata"
@@ -586,7 +605,7 @@ def gorunum(sid: str) -> dict | None:
             "ikiz": {"gun": gun, "sen_yildiz": gercek, "ikiz_yildiz": ideal, "toplam_yildiz": toplam, "fark": ideal - gercek,
                      "seri": tr["twin"]["streak"], "risk": tr["twin"]["risk"], "risk_tr": RISK_TR[tr["twin"]["risk"]],
                      "parlaklik": _parlaklik(tr), "egri": _egri(tr)},
-            "haftalar": tr["roadmap"]["weeks"],
+            "haftalar": tr["roadmap"]["weeks"], "kaynaklar": tr.get("kaynaklar"),
             "harita": [{"id": x["id"], "day": x["day"], "title": x["title"], "type": x["type"], "minutes": x["minutes"],
                         "done": bool(x["done"] or x["id"] in s["bitenler"])} for x in tr["roadmap"]["tasks"]],
         })
@@ -611,15 +630,16 @@ def gorunum(sid: str) -> dict | None:
     }
 
 
-def yeni_oturum(ad: str, akademik: str | None, hobi: str | None, dakika: int, zaman: str, son_tarihler: list[dict]) -> str:
-    sid = uuid.uuid4().hex[:12]
+def yeni_oturum(ad: str, akademik: str | None, hobi: str | None, dakika: int, zaman: str, son_tarihler: list[dict],
+                seviye: str = "baslangic", not_: str = "") -> str:
+    sid = uuid.uuid4().hex  # 128 bit
     tracks = {}
     if akademik:
         tracks["akademik"] = {"topic": icerik.konu_adi(akademik)}
     if hobi:
         tracks["hobi"] = {"topic": icerik.konu_adi(hobi)}
     s = {"id": sid, "name": ad or "Elif", "daily_minutes": dakika, "zaman": zaman, "baslangic": dt.date.today().isoformat(),
-         "son_tarihler": son_tarihler, "tracks": tracks, "durum": "kuruluyor", "olaylar": [], "bitenler": [], "coach": None,
+         "son_tarihler": son_tarihler, "seviye": seviye, "not": not_[:200], "tracks": tracks, "durum": "kuruluyor", "olaylar": [], "bitenler": [], "coach": None,
          "oneriler": {}, "gorevler": [],
          "ogret": {"alan": "akademik" if akademik else "hobi", "konu": "", "cumleler": [], "son": None}}
     first = s["ogret"]["alan"]

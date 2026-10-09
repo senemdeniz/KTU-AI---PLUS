@@ -8,18 +8,55 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import re
+import time
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 import gozlemevi as g
+import guvenlik as gv
 import ikiz_ajan as ia
 import store
 
 app = FastAPI(title="İkiz API", version="2.0")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+# Kimlik bilgisi (cookie) kullanılmaz; oturum kimliği 128 bitlik gizli bir değerdir. Üretimde IKIZ_CORS ile kısıtla.
+_IZIN = [o for o in os.environ.get("IKIZ_CORS", "*").split(",") if o]
+app.add_middleware(CORSMiddleware, allow_origins=_IZIN, allow_methods=["GET", "POST", "DELETE"], allow_headers=["Content-Type"])
+
+_CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
+_SINIR: dict[str, list[float]] = {}
+GENEL_LIMIT = int(os.environ.get("IKIZ_GENEL_LIMIT", 240))
+YAZMA_LIMIT = int(os.environ.get("IKIZ_YAZMA_LIMIT", 45))
+GOVDE_LIMIT = 20_000   # dakikada istek (IP başına) ve en büyük gövde (bayt)
+
+
+@app.middleware("http")
+async def koruma(request: Request, call_next):
+    ip = request.client.host if request.client else "?"
+    simdi = time.time()
+    yazma = request.method in ("POST", "DELETE")
+    for anahtar, limit in ((ip + ":g", GENEL_LIMIT), (ip + ":w", YAZMA_LIMIT)):
+        if anahtar.endswith(":w") and not yazma:
+            continue
+        k = [x for x in _SINIR.get(anahtar, []) if simdi - x < 60]
+        if len(k) >= limit:
+            _SINIR[anahtar] = k
+            return JSONResponse({"detail": "Çok fazla istek. Biraz bekle."}, status_code=429, headers={"Retry-After": "30"})
+        k.append(simdi)
+        _SINIR[anahtar] = k
+    if int(request.headers.get("content-length") or 0) > GOVDE_LIMIT:
+        return JSONResponse({"detail": "İstek çok büyük."}, status_code=413)
+    resp = await call_next(request)
+    resp.headers.update({"X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer",
+                         "Content-Security-Policy": _CSP, "Permissions-Policy": "microphone=(self), camera=(), geolocation=()",
+                         "Cache-Control": resp.headers.get("Cache-Control", "no-store")})
+    return resp
 
 
 class SonTarih(BaseModel):
@@ -34,6 +71,8 @@ class OturumIstek(BaseModel):
     dakika: int = Field(default=30, ge=10, le=240)
     zaman: str = Field(default="aksam", pattern="^(sabah|ogle|aksam)$")
     son_tarihler: list[SonTarih] = Field(default_factory=list, max_length=5)
+    seviye: str = Field(default="baslangic", pattern="^(baslangic|orta|ileri)$")
+    hedef_notu: str = Field(default="", max_length=200)
 
 
 class GunIstek(BaseModel):
@@ -47,7 +86,7 @@ class MetinIstek(BaseModel):
 
 
 class SohbetIstek(BaseModel):
-    metin: str = Field(min_length=1, max_length=600)
+    metin: str = Field(min_length=1, max_length=400)
     ajan: str | None = None
     alan: str | None = None
 
@@ -56,8 +95,11 @@ class KararIstek(BaseModel):
     pass
 
 
+_SID = re.compile(r"^[0-9a-f]{32}$")
+
+
 def _var(sid: str) -> dict:
-    s = store.get(sid)
+    s = store.get(sid) if _SID.match(sid) else None
     if not s:
         raise HTTPException(404, "Oturum bulunamadı")
     return s
@@ -72,7 +114,11 @@ def health():
 def oturum_ac(r: OturumIstek):
     if not r.akademik and not r.hobi:
         raise HTTPException(422, "En az bir alan seç: akademik veya hobi")
-    sid = g.yeni_oturum(r.ad, r.akademik, r.hobi, r.dakika, r.zaman, [d.model_dump() for d in r.son_tarihler])
+    for alan_metni in (r.ad, r.akademik or "", r.hobi or "", r.hedef_notu, *[d.baslik for d in r.son_tarihler]):
+        d = gv.denetle(alan_metni) if alan_metni.strip() else None
+        if d and not d.izin:
+            raise HTTPException(422, d.mesaj or "Bu alan kabul edilmedi")
+    sid = g.yeni_oturum(r.ad, r.akademik, r.hobi, r.dakika, r.zaman, [d.model_dump() for d in r.son_tarihler], r.seviye, r.hedef_notu)
     g._calistir(g.kurulum, sid)
     return {"session_id": sid}
 
@@ -85,7 +131,7 @@ def oturum(sid: str):
 
 @app.delete("/v2/sessions/{sid}")
 def oturum_sil(sid: str):
-    if not store.delete(sid):
+    if not _SID.match(sid) or not store.delete(sid):
         raise HTTPException(404, "Oturum bulunamadı")
     return {"ok": True}
 
@@ -193,3 +239,9 @@ def ogret_sinav(sid: str):
 def sohbet(sid: str, r: SohbetIstek):
     _var(sid)
     return g.sohbet(sid, r.metin, r.ajan, r.alan)
+
+
+# Web arayüzü (aynı kökenden servis edilir; API ile aynı sunucu)
+_WEB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
+if os.path.isdir(_WEB):
+    app.mount("/", StaticFiles(directory=_WEB, html=True), name="web")
