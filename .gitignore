@@ -1,12 +1,9 @@
 __pycache__/
 *.pyc
-.env
-.streamlit/secrets.toml
+.pytest_cache/
 .venv/
 .DS_Store
 
-ikiz.db
-mobile/node_modules/
-mobile/dist/
-mobile/.expo/
+# Gizli anahtarlar ve yerel veri
+.env
 *.db
