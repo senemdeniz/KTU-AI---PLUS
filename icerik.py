@@ -51,7 +51,7 @@ def profil(alan: str, konu: str, ad: str, dakika: int) -> dict:
 
 
 # -------------------------------------------------------------------- hedef
-def hedef(alan: str, konu: str, dakika: int) -> dict:
+def hedef(alan: str, konu: str, dakika: int, sure: int = 21) -> dict:
     t = _tip(konu)
     if t == "turev":
         return {"candidates": [
@@ -62,8 +62,8 @@ def hedef(alan: str, konu: str, dakika: int) -> dict:
             {"title": "İntegrale erkenden başlamak", "fit_score": 52,
              "reason": "Önce türev oturmadan verimsiz olur."}],
             "selected": "Vizeye kadar türev kurallarıyla ekstremum sorularını çözebilmek",
-            "rationale": f"Vizen yakın ve günde {dakika} dakikan var. En çok soru getiren ve diğer konuların dayandığı konu türev; 21 günde somut bir sonuca ulaşırsın.",
-            "target_skills": _HEDEF_SEVIYE["turev"], "duration_days": 21,
+            "rationale": f"Vizen yakın ve günde {dakika} dakikan var. En çok soru getiren ve diğer konuların dayandığı konu türev; {sure} günde somut bir sonuca ulaşırsın.",
+            "target_skills": _HEDEF_SEVIYE["turev"], "duration_days": sure,
             "success_metric": "Süreli 12 soruluk mini denemede en az 9 doğru"}
     if t == "gitar":
         return {"candidates": [
@@ -72,8 +72,8 @@ def hedef(alan: str, konu: str, dakika: int) -> dict:
             {"title": "Ritim ve tırmalama kalıplarını oturtmak", "fit_score": 66, "reason": "Akorlar oturunca anlamlı."},
             {"title": "Nota okumaya başlamak", "fit_score": 45, "reason": "Şimdilik hobi motivasyonunu düşürebilir."}],
             "selected": "4 akorla bir şarkıyı baştan sona çalabilmek",
-            "rationale": f"Günde {dakika} dakikayla en hızlı tatmin eden hedef bu: 21 gün sonunda çalıp paylaşabileceğin bir şarkın olur.",
-            "target_skills": _HEDEF_SEVIYE["gitar"], "duration_days": 21,
+            "rationale": f"Günde {dakika} dakikayla en hızlı tatmin eden hedef bu: {sure} gün sonunda çalıp paylaşabileceğin bir şarkın olur.",
+            "target_skills": _HEDEF_SEVIYE["gitar"], "duration_days": sure,
             "success_metric": "Seçtiğin şarkıyı 3 dakika boyunca duraksamadan çalmak"}
     if t == "veri":
         return {"candidates": [
@@ -82,17 +82,17 @@ def hedef(alan: str, konu: str, dakika: int) -> dict:
             {"title": "Algoritma analizi ve sıralamada derinleşmek", "fit_score": 68, "reason": "Önce yapıları bilmek gerekir."},
             {"title": "Yarışmalı programlama problemlerine başlamak", "fit_score": 48, "reason": "Temel oturmadan hayal kırıklığı yaratır."}],
             "selected": "Temel veri yapılarını seçip gerekçesiyle kullanabilmek (dizi, bağlı liste, yığın, kuyruk, hash, ağaç)",
-            "rationale": f"Günde {dakika} dakikayla 21 günde en çok işe yarayan çekirdek: önce karmaşıklık, sonra doğrusal yapılar, hash, ağaçlar ve graflara giriş. Her yapıyı \"ne zaman seçerim?\" sorusuyla öğrenirsin.",
-            "target_skills": _HEDEF_SEVIYE["veri"], "duration_days": 21,
+            "rationale": f"Günde {dakika} dakikayla {sure} günde en çok işe yarayan çekirdek: önce karmaşıklık, sonra doğrusal yapılar, hash, ağaçlar ve graflara giriş. Her yapıyı \"ne zaman seçerim?\" sorusuyla öğrenirsin.",
+            "target_skills": _HEDEF_SEVIYE["veri"], "duration_days": sure,
             "success_metric": "Verilen 5 probleme uygun veri yapısını seçip nedenini anlatabilmek"}
     b = _genel_beceriler(konu)
     return {"candidates": [
-        {"title": f"{konu} için 21 günlük temel sprint", "fit_score": 80, "reason": "Küçük adımlarla istikrar kurar."},
+        {"title": f"{konu} için {sure} günlük temel sprint", "fit_score": 80, "reason": "Küçük adımlarla istikrar kurar."},
         {"title": f"{konu} üzerinde küçük bir proje bitirmek", "fit_score": 64, "reason": "Önce temeller gerekir."},
         {"title": f"{konu} için ileri düzey kaynakları taramak", "fit_score": 40, "reason": "Başlangıç için erken."}],
-        "selected": f"{konu} için 21 günlük temel sprint",
-        "rationale": f"{konu} için günde {dakika} dakikayla 21 günde ölçülebilir bir temel kurmak en gerçekçi seçenek.",
-        "target_skills": {x: 2.5 for x in b}, "duration_days": 21,
+        "selected": f"{konu} için {sure} günlük temel sprint",
+        "rationale": f"{konu} için günde {dakika} dakikayla {sure} günde ölçülebilir bir temel kurmak en gerçekçi seçenek.",
+        "target_skills": {x: 2.5 for x in b}, "duration_days": sure,
         "success_metric": f"{konu} hakkında 3 dakika kendi sözlerinle anlatım yapabilmek"}
 
 

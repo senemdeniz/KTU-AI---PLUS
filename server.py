@@ -73,6 +73,7 @@ class OturumIstek(BaseModel):
     son_tarihler: list[SonTarih] = Field(default_factory=list, max_length=5)
     seviye: str = Field(default="baslangic", pattern="^(baslangic|orta|ileri)$")
     hedef_notu: str = Field(default="", max_length=200)
+    sure: int = Field(default=21, ge=7, le=90)
 
 
 class GunIstek(BaseModel):
@@ -118,7 +119,7 @@ def oturum_ac(r: OturumIstek):
         d = gv.denetle(alan_metni) if alan_metni.strip() else None
         if d and not d.izin:
             raise HTTPException(422, d.mesaj or "Bu alan kabul edilmedi")
-    sid = g.yeni_oturum(r.ad, r.akademik, r.hobi, r.dakika, r.zaman, [d.model_dump() for d in r.son_tarihler], r.seviye, r.hedef_notu)
+    sid = g.yeni_oturum(r.ad, r.akademik, r.hobi, r.dakika, r.zaman, [d.model_dump() for d in r.son_tarihler], r.seviye, r.hedef_notu, r.sure)
     g._calistir(g.kurulum, sid)
     return {"session_id": sid}
 
@@ -243,6 +244,83 @@ def ogret_sinav(sid: str, r: SinavIstek | None = None):
 def sohbet(sid: str, r: SohbetIstek):
     _var(sid)
     return g.sohbet(sid, r.metin, r.ajan, r.alan)
+
+
+class ProfilIstek(BaseModel):
+    ad: str | None = Field(default=None, min_length=1, max_length=40)
+    dakika: int | None = Field(default=None, ge=10, le=240)
+    zaman: str | None = Field(default=None, pattern="^(sabah|ogle|aksam)$")
+    seviye: str | None = Field(default=None, pattern="^(baslangic|orta|ileri)$")
+    hedef_notu: str | None = Field(default=None, max_length=200)
+    sure: int | None = Field(default=None, ge=7, le=90)
+    son_tarihler: list[SonTarih] | None = Field(default=None, max_length=5)
+
+
+@app.patch("/v2/sessions/{sid}/profile")
+def profil(sid: str, r: ProfilIstek):
+    _var(sid)
+    for metin in (r.ad or "", r.hedef_notu or "", *[d.baslik for d in (r.son_tarihler or [])]):
+        d = gv.denetle(metin) if metin.strip() else None
+        if d and not d.izin:
+            raise HTTPException(422, d.mesaj or "Bu alan kabul edilmedi")
+    out = g.profil_guncelle(sid, {"ad": r.ad, "dakika": r.dakika, "zaman": r.zaman, "seviye": r.seviye, "not_": r.hedef_notu, "sure": r.sure,
+                                  "son_tarihler": [d.model_dump() for d in r.son_tarihler] if r.son_tarihler is not None else None})
+    if not out["ok"]:
+        raise HTTPException(409, out["mesaj"])
+    return g.gorunum(sid)
+
+
+class TakimyildizIstek(BaseModel):
+    tur: str = Field(pattern="^(akademik|hobi)$")
+    konu: str = Field(min_length=2, max_length=80)
+
+
+@app.post("/v2/sessions/{sid}/tracks")
+def takimyildiz(sid: str, r: TakimyildizIstek):
+    _var(sid)
+    d = gv.denetle(r.konu)
+    if not d.izin:
+        raise HTTPException(422, d.mesaj or "Bu konu kabul edilmedi")
+    out = g.takimyildiz_ekle(sid, r.tur, r.konu.strip())
+    if not out["ok"]:
+        raise HTTPException(409, out["mesaj"])
+    return out
+
+
+class PratikIstek(BaseModel):
+    alan: str = Field(max_length=20)
+    beceri: str = Field(min_length=1, max_length=60)
+    bpm: int | None = Field(default=None, ge=20, le=300)
+    dakika: int = Field(default=10, ge=1, le=240)
+    not_: str = Field(default="", max_length=200, alias="not")
+    model_config = {"populate_by_name": True}
+
+
+@app.post("/v2/sessions/{sid}/practice")
+def pratik(sid: str, r: PratikIstek):
+    _var(sid)
+    out = g.pratik_ekle(sid, r.alan, r.beceri, r.bpm, r.dakika, r.not_)
+    if not out["ok"]:
+        raise HTTPException(422, out["mesaj"])
+    return out
+
+
+@app.get("/v2/sessions/{sid}/agents/{ajan}/output")
+def ajan_ciktisi(sid: str, ajan: str):
+    _var(sid)
+    if ajan not in {a["ad"] for a in g.AJANLAR}:
+        raise HTTPException(404, "Ajan bulunamadı")
+    return g.ajan_ciktisi(sid, ajan)
+
+
+
+@app.delete("/v2/sessions/{sid}/teach/sentences/{no}")
+def ogret_cumle_sil(sid: str, no: int):
+    _var(sid)
+    out = g.ogret_cumle_sil(sid, no)
+    if not out["ok"]:
+        raise HTTPException(404, "Cümle bulunamadı")
+    return out
 
 
 # Web arayüzü (aynı kökenden servis edilir; API ile aynı sunucu)
