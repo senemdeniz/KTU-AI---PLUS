@@ -248,3 +248,21 @@ textarea.girdi{min-height:92px;resize:vertical}
 }
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 @media (max-width:560px){.ust{gap:12px}.rozet{min-width:0;font-size:12px;padding:5px 10px}.marka{flex:none}}
+/* rota ve ikiz */
+.nokta-rota{width:10px;height:10px;border-radius:50%;display:inline-block;border:1.5px dashed #c9d0f5;opacity:.75}
+.nokta-sonuk{width:8px;height:8px;border-radius:50%;display:inline-block;background:#3a4888}
+.nokta-mavi-dolu{width:10px;height:10px;border-radius:50%;display:inline-block;background:var(--mavi)}
+.nokta-halkali{width:10px;height:10px;border-radius:50%;display:inline-block;background:var(--mavi);box-shadow:0 0 0 3px var(--gece),0 0 0 4.5px var(--mavi)}
+.ikiz-ozet{margin-top:40px;padding-top:24px;border-top:1px solid var(--cizgi);display:grid;gap:14px}
+.ikiz-ozet-bas{display:flex;justify-content:space-between;align-items:flex-end;gap:16px}
+.ikiz-ozet h3{font-size:24px;color:var(--mavi)}
+.ikiz-yuzde{font-family:var(--baslik);font-size:40px;color:var(--mavi);letter-spacing:-.02em}
+.ikiz-gok{border:1px solid var(--cizgi);border-radius:var(--r-buyuk);background:radial-gradient(90% 120% at 50% 0%,rgba(142,162,255,.1),transparent 70%)}
+.ikiz-gok svg,.ikiz-buyuk svg{width:100%;height:auto;display:block}
+.takim.ikiz-buyuk{aspect-ratio:auto}
+.ikiz-nokta{width:14px;height:14px;border-radius:50%;justify-self:center;background:#3a4888}
+.ikiz-nokta.parlak{background:var(--mavi)}
+.ikiz-nokta.halkali{background:var(--mavi);box-shadow:0 0 0 3px var(--gece),0 0 0 5px var(--mavi)}
+.gorev.kilitli{opacity:.5}
+.yildiz-sonuc b{white-space:nowrap}
+.ikiz-gok{padding:6px 0}

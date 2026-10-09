@@ -56,32 +56,45 @@ export function noktalar(n, w, h, tohum = 3) {
   });
 }
 
-/** Sen (altın, dolu) / ikizin (mavi, halka) / gelecek (sönük) takımyıldızı. */
-export function takimyildiz({ sen, ikiz, toplam, w = 640, h = 400, etiket = true }) {
+/** Sen (altın, dolu) / rota (soluk kesikli: planı aksatmasaydın) / gelecek (sönük). İkiz burada YOK. */
+export function takimyildiz({ sen, rota, toplam, w = 640, h = 400, etiket = true }) {
   const p = noktalar(toplam, w, h);
   const yol = (a, b) => p.slice(a, b).map((q, i) => `${i ? 'L' : 'M'}${q.x.toFixed(1)} ${q.y.toFixed(1)}`).join(' ');
-  const el = svg('svg', { viewBox: `0 0 ${w} ${h}`, role: 'img', 'aria-label': `Takımyıldız: ${sen} yıldız yanıyor, ikizin ${Math.max(ikiz - sen, 0)} yıldız önde, toplam ${toplam}` });
-  const defs = svg('defs', {}, svg('radialGradient', { id: 'parla' }, svg('stop', { offset: '0', 'stop-color': '#f5d78e', 'stop-opacity': '.55' }), svg('stop', { offset: '1', 'stop-color': '#f5d78e', 'stop-opacity': '0' })));
-  el.append(defs);
-  if (ikiz < toplam) el.append(svg('path', { d: yol(Math.max(ikiz - 1, 0), toplam), stroke: '#2e3b75', 'stroke-width': 1.2, fill: 'none' }));
-  if (ikiz > sen) el.append(svg('path', { d: yol(Math.max(sen - 1, 0), ikiz), stroke: '#8ea2ff', 'stroke-width': 1.5, 'stroke-dasharray': '6 6', fill: 'none' }));
+  const el = svg('svg', { viewBox: `0 0 ${w} ${h}`, role: 'img', 'aria-label': `Takımyıldız: ${sen} yıldız yaktın, rotan ${rota} diyor, toplam ${toplam}` });
+  el.append(svg('defs', {}, svg('radialGradient', { id: 'parla' }, svg('stop', { offset: '0', 'stop-color': '#f5d78e', 'stop-opacity': '.55' }), svg('stop', { offset: '1', 'stop-color': '#f5d78e', 'stop-opacity': '0' }))));
+  if (rota < toplam) el.append(svg('path', { d: yol(Math.max(rota - 1, 0), toplam), stroke: '#2e3b75', 'stroke-width': 1.2, fill: 'none' }));
+  if (rota > sen) el.append(svg('path', { d: yol(Math.max(sen - 1, 0), rota), stroke: '#c9d0f5', 'stroke-opacity': .55, 'stroke-width': 1.4, 'stroke-dasharray': '3 6', fill: 'none' }));
   if (sen > 1) el.append(svg('path', { d: yol(0, sen), stroke: '#f5d78e', 'stroke-width': 1.8, fill: 'none' }));
   p.forEach((q, i) => {
     if (i < sen) {
       const son = i === sen - 1;
       if (son) el.append(svg('circle', { cx: q.x, cy: q.y, r: 22, fill: 'url(#parla)' }));
       el.append(svg('circle', { cx: q.x, cy: q.y, r: son ? 6.5 : 4.5, fill: '#f5d78e' }));
-    } else if (i < ikiz) el.append(svg('circle', { cx: q.x, cy: q.y, r: 5.5, fill: 'none', stroke: '#8ea2ff', 'stroke-width': 2 }));
+    } else if (i < rota) el.append(svg('circle', { cx: q.x, cy: q.y, r: 4, fill: 'none', stroke: '#c9d0f5', 'stroke-opacity': .7, 'stroke-width': 1.4, 'stroke-dasharray': '2 2' }));
     else el.append(svg('circle', { cx: q.x, cy: q.y, r: 3, fill: '#2e3b75' }));
   });
-  if (etiket && sen > 0) {
-    const q = p[sen - 1];
-    el.append(svg('text', { x: q.x, y: q.y + 26, 'text-anchor': 'middle', fill: '#f5d78e', 'font-size': 13, 'font-weight': 700, 'font-family': 'DM Sans, sans-serif' }, (() => { const t = document.createTextNode('Sen'); return t; })()));
+  const yazi = (q, dy, renk, s) => svg('text', { x: q.x, y: q.y + dy, 'text-anchor': 'middle', fill: renk, 'font-size': 13, 'font-weight': 700, 'font-family': 'DM Sans, sans-serif' }, document.createTextNode(s));
+  if (etiket && sen > 0) el.append(yazi(p[sen - 1], 26, '#f5d78e', 'Sen'));
+  if (etiket && rota > sen) el.append(yazi(p[rota - 1], -16, '#c9d0f5', 'Rota'));
+  return el;
+}
+
+/** İkizin gökyüzü: her kavram bir yıldız. sönük = öğretilmedi, parlak = kısmen, halkalı = tamamen. Kilitli = günü gelmedi. */
+export function ikizGogu(yildizlar, w = 640, h = 220, etiket = true) {
+  const n = Math.max(yildizlar.length, 1), pad = 64;
+  const el = svg('svg', { viewBox: `0 0 ${w} ${h}`, role: 'img', 'aria-label': `İkizin ${yildizlar.filter((y) => y.star !== 'sonuk').length} kavramı biliyor, toplam ${yildizlar.length}` });
+  const p = yildizlar.map((_, i) => { const t = n === 1 ? 0.5 : i / (n - 1); return { x: pad + t * (w - 2 * pad), y: h * 0.52 - Math.sin(t * Math.PI) * h * 0.2 + (i % 2 ? 10 : -4) }; });
+  for (let i = 1; i < p.length; i++) {
+    const bilir = yildizlar[i].star !== 'sonuk' && yildizlar[i - 1].star !== 'sonuk';
+    el.append(svg('line', { x1: p[i - 1].x, y1: p[i - 1].y, x2: p[i].x, y2: p[i].y, stroke: bilir ? '#8ea2ff' : '#1f2a57', 'stroke-width': bilir ? 1.6 : 1, 'stroke-dasharray': bilir ? 'none' : '2 5' }));
   }
-  if (etiket && ikiz > sen) {
-    const q = p[ikiz - 1];
-    el.append(svg('text', { x: q.x, y: q.y - 16, 'text-anchor': 'middle', fill: '#8ea2ff', 'font-size': 13, 'font-weight': 700, 'font-family': 'DM Sans, sans-serif' }, document.createTextNode('İkizin')));
-  }
+  yildizlar.forEach((y, i) => {
+    const q = p[i];
+    if (y.star === 'halkali') { el.append(svg('circle', { cx: q.x, cy: q.y, r: 13, fill: 'none', stroke: '#8ea2ff', 'stroke-width': 1.4 })); el.append(svg('circle', { cx: q.x, cy: q.y, r: 6.5, fill: '#8ea2ff' })); }
+    else if (y.star === 'parlak') el.append(svg('circle', { cx: q.x, cy: q.y, r: 6, fill: '#8ea2ff' }));
+    else el.append(svg('circle', { cx: q.x, cy: q.y, r: 4, fill: y.acik ? '#3a4888' : '#1f2a57' }));
+    if (etiket) el.append(svg('text', { x: q.x, y: q.y + 30, 'text-anchor': 'middle', fill: y.star === 'sonuk' ? '#7f89b8' : '#c9d0f5', 'font-size': 12, 'font-weight': 600, 'font-family': 'DM Sans, sans-serif' }, document.createTextNode(y.baslik.length > 18 ? y.baslik.slice(0, 17) + '…' : y.baslik)));
+  });
   return el;
 }
 
@@ -96,9 +109,9 @@ export function ikiliAnimasyon(kap) {
     const kat = (pts, renk, halka, dash) => {
       const m = Math.floor(ilerle * pts.length);
       if (m > 1) kok.append(svg('path', { d: pts.slice(0, m).map((q, i) => `${i ? 'L' : 'M'}${q.x.toFixed(1)} ${q.y.toFixed(1)}`).join(' '), stroke: renk, 'stroke-width': 1.6, fill: 'none', 'stroke-dasharray': dash || 'none', opacity: 0.85 }));
-      pts.slice(0, m).forEach((q, i) => kok.append(halka ? svg('circle', { cx: q.x, cy: q.y, r: i === m - 1 ? 7 : 5, fill: 'none', stroke: renk, 'stroke-width': 2 }) : svg('circle', { cx: q.x, cy: q.y, r: i === m - 1 ? 7 : 4.5, fill: renk })));
+      pts.slice(0, m).forEach((q, i) => kok.append(halka ? svg('circle', { cx: q.x, cy: q.y, r: 3.5, fill: 'none', stroke: renk, 'stroke-width': 1.2, 'stroke-opacity': .7 }) : svg('circle', { cx: q.x, cy: q.y, r: i === m - 1 ? 7 : 4.5, fill: renk })));
     };
-    kat(a, '#f5d78e', false); kat(b, '#8ea2ff', true, '6 6');
+    kat(b, '#c9d0f5', true, '3 6'); kat(a, '#f5d78e', false);
   };
   if (azalt) { ciz(1); return; }
   let t0 = null;
@@ -111,13 +124,13 @@ export function ikiliAnimasyon(kap) {
   requestAnimationFrame(adim);
 }
 
-/** Sen ve ikiz eğrisi. */
+/** Sen ve rota eğrisi. */
 export function egri(sen, ikiz, w = 760, h = 300) {
   const max = Math.max(...ikiz, 1), n = Math.max(ikiz.length - 1, 1), pad = 28;
   const nk = (a) => a.map((v, i) => `${i ? 'L' : 'M'}${(pad + (i / n) * (w - 2 * pad)).toFixed(1)} ${(h - pad - (v / max) * (h - 2 * pad)).toFixed(1)}`).join(' ');
-  const el = svg('svg', { viewBox: `0 0 ${w} ${h}`, role: 'img', 'aria-label': `Yıldız eğrisi: sen ${sen.at(-1) ?? 0}, ikizin ${ikiz.at(-1) ?? 0}` });
+  const el = svg('svg', { viewBox: `0 0 ${w} ${h}`, role: 'img', 'aria-label': `Yıldız eğrisi: sen ${sen.at(-1) ?? 0}, rota ${ikiz.at(-1) ?? 0}` });
   for (let i = 0; i <= 4; i++) { const y = pad + (i / 4) * (h - 2 * pad); el.append(svg('line', { x1: pad, x2: w - pad, y1: y, y2: y, stroke: '#1f2a57', 'stroke-width': 1 })); }
-  el.append(svg('path', { d: nk(ikiz), stroke: '#8ea2ff', 'stroke-width': 2.2, 'stroke-dasharray': '7 7', fill: 'none' }));
+  el.append(svg('path', { d: nk(ikiz), stroke: '#c9d0f5', 'stroke-opacity': .6, 'stroke-width': 2, 'stroke-dasharray': '3 7', fill: 'none' }));
   el.append(svg('path', { d: nk(sen), stroke: '#f5d78e', 'stroke-width': 2.8, fill: 'none', 'stroke-linejoin': 'round' }));
   return el;
 }
