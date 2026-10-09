@@ -1,4 +1,7 @@
-# yks/ — AYT Matematik haritası ve soru bankası
+# Örnek içerik paketi: AYT Matematik (YKS)
+
+İkiz her ders ve sınav için çalışır; bu klasör yalnızca bir örnek paketidir (YKS öğrencileri için hazır harita ve soru bankası). Uygulamanın akademik alanı YKS ile sınırlı değildir.
+
 
 - `harita_verisi.py` — 21 eyalet (konu), bölge, önkoşul, yaklaşık soru ağırlığı, tahmini emek, stratejik sefer sırası → `harita.json`
 - `sorular.py` — 28 özgün YKS tarzı soru (her eyalette en az 1). Cevaplar sympy ile bağımsız doğrulanır, her yanlış şık bir hata türüne bağlıdır → `sorular.json`

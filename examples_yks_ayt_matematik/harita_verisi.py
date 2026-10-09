@@ -71,4 +71,4 @@ if __name__ == "__main__":
     for n, i in enumerate(SIRA, 1):
         v = P[i]; print(f"{n:2d}. {v['kisa']:10s} ort={v['ort']:<4} saat={v['saat']:<3} öncelik={v['oncelik']:<5} açar={v['acilan_ort']}")
     print(egri())
-    json.dump({"eyaletler": P, "sira": SIRA}, open("/home/claude/repo/yks/harita.json","w"), ensure_ascii=False, indent=1)
+    json.dump({"eyaletler": P, "sira": SIRA}, open("/home/claude/repo/examples_yks_ayt_matematik/harita.json","w"), ensure_ascii=False, indent=1)
