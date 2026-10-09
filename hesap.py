@@ -3,6 +3,7 @@
 - Şifreler scrypt ile tuzlanıp özetlenir; düz metin hiçbir yerde saklanmaz.
 - Giriş, rastgele bir belirteçle (HttpOnly çerez) tutulur; veritabanında yalnızca belirtecin SHA-256 özeti durur.
 - Her hesabın tek bir gökyüzü (oturum) vardır; takımyıldızlar bu gökyüzünün içindedir.
+- Veritabanına yalnızca store.sorgu / store.yaz ile erişilir (kilitli; bkz. store.py).
 """
 from __future__ import annotations
 
@@ -10,6 +11,8 @@ import hashlib
 import hmac
 import re
 import secrets
+import sqlite3
+import threading
 import time
 
 import store
@@ -18,14 +21,14 @@ GIRIS_SURESI = 30 * 24 * 3600          # 30 gün
 KULLANICI_DESENI = re.compile(r"^[a-z0-9_.]{3,24}$")
 _SCRYPT = {"n": 2 ** 14, "r": 8, "p": 1, "dklen": 32}
 _SAHTE_TUZ = secrets.token_bytes(16)    # var olmayan kullanıcıda da aynı süreyi harcamak için
+_kilitler: dict[str, threading.Lock] = {}
+_kilitler_kilidi = threading.Lock()
 
 
-def _tablolar() -> None:
-    db = store._db()
-    db.execute("CREATE TABLE IF NOT EXISTS hesaplar (kullanici TEXT PRIMARY KEY, tuz BLOB NOT NULL, ozet BLOB NOT NULL, "
-               "sid TEXT, olusturma REAL NOT NULL)")
-    db.execute("CREATE TABLE IF NOT EXISTS girisler (belirtec TEXT PRIMARY KEY, kullanici TEXT NOT NULL, bitis REAL NOT NULL)")
-    db.commit()
+def kullanici_kilidi(kullanici: str) -> threading.Lock:
+    """Aynı hesap için eşzamanlı 'gökyüzü aç' isteklerini sıraya koyar."""
+    with _kilitler_kilidi:
+        return _kilitler.setdefault(kullanici, threading.Lock())
 
 
 def _ozet(sifre: str, tuz: bytes) -> bytes:
@@ -56,79 +59,60 @@ def kayit(kullanici: str, sifre: str) -> tuple[bool, str]:
         return False, "Kullanıcı adı 3–24 karakter olmalı; yalnızca küçük harf, rakam, nokta ve alt çizgi."
     if (sorun := sifre_sorunu(sifre)):
         return False, sorun
-    _tablolar()
     tuz = secrets.token_bytes(16)
-    with store._lock:
-        db = store._db()
-        if db.execute("SELECT 1 FROM hesaplar WHERE kullanici=?", (k,)).fetchone():
-            return False, "Bu kullanıcı adı alınmış."
-        db.execute("INSERT INTO hesaplar (kullanici, tuz, ozet, sid, olusturma) VALUES (?,?,?,?,?)",
-                   (k, tuz, _ozet(sifre, tuz), None, time.time()))
-        db.commit()
+    ozet = _ozet(sifre, tuz)                         # yavaş işlem kilidin dışında
+    try:
+        store.yaz("INSERT INTO hesaplar (kullanici, tuz, ozet, sid, olusturma) VALUES (?,?,?,?,?)",
+                  (k, tuz, ozet, None, time.time()))
+    except sqlite3.IntegrityError:
+        return False, "Bu kullanıcı adı alınmış."
     return True, k
 
 
 def dogrula(kullanici: str, sifre: str) -> str | None:
     """Doğruysa normalize kullanıcı adını döndürür. Yanlış ad ile yanlış şifre aynı süreyi harcar."""
-    _tablolar()
     k = normalize(kullanici)
-    satir = store._db().execute("SELECT tuz, ozet FROM hesaplar WHERE kullanici=?", (k,)).fetchone()
+    satir = store.sorgu("SELECT tuz, ozet FROM hesaplar WHERE kullanici=?", (k,))
     if not satir:
         _ozet(sifre[:128], _SAHTE_TUZ)
         return None
-    return k if hmac.compare_digest(_ozet(sifre[:128], satir[0]), satir[1]) else None
+    tuz, ozet = satir[0]
+    return k if hmac.compare_digest(_ozet(sifre[:128], tuz), ozet) else None
 
 
 def giris_ac(kullanici: str) -> str:
-    _tablolar()
     belirtec = secrets.token_urlsafe(32)
-    with store._lock:
-        db = store._db()
-        db.execute("DELETE FROM girisler WHERE bitis < ?", (time.time(),))
-        db.execute("INSERT INTO girisler (belirtec, kullanici, bitis) VALUES (?,?,?)",
-                   (_belirtec_ozeti(belirtec), kullanici, time.time() + GIRIS_SURESI))
-        db.commit()
+    store.yaz("DELETE FROM girisler WHERE bitis < ?", (time.time(),))
+    store.yaz("INSERT INTO girisler (belirtec, kullanici, bitis) VALUES (?,?,?)",
+              (_belirtec_ozeti(belirtec), kullanici, time.time() + GIRIS_SURESI))
     return belirtec
 
 
 def kim(belirtec: str | None) -> str | None:
     if not belirtec or len(belirtec) > 100:
         return None
-    _tablolar()
-    satir = store._db().execute("SELECT kullanici, bitis FROM girisler WHERE belirtec=?", (_belirtec_ozeti(belirtec),)).fetchone()
-    return satir[0] if satir and satir[1] > time.time() else None
+    satir = store.sorgu("SELECT kullanici, bitis FROM girisler WHERE belirtec=?", (_belirtec_ozeti(belirtec),))
+    return satir[0][0] if satir and satir[0][1] > time.time() else None
 
 
 def giris_kapat(belirtec: str | None) -> None:
-    if not belirtec:
-        return
-    _tablolar()
-    with store._lock:
-        store._db().execute("DELETE FROM girisler WHERE belirtec=?", (_belirtec_ozeti(belirtec),))
-        store._db().commit()
+    if belirtec:
+        store.yaz("DELETE FROM girisler WHERE belirtec=?", (_belirtec_ozeti(belirtec),))
 
 
 def gokyuzu(kullanici: str) -> str | None:
-    _tablolar()
-    satir = store._db().execute("SELECT sid FROM hesaplar WHERE kullanici=?", (kullanici,)).fetchone()
-    if not satir or not satir[0] or not store.get(satir[0]):
-        return None
-    return satir[0]
+    satir = store.sorgu("SELECT sid FROM hesaplar WHERE kullanici=?", (kullanici,))
+    sid = satir[0][0] if satir else None
+    return sid if sid and store.get(sid) else None
 
 
 def gokyuzu_bagla(kullanici: str, sid: str | None) -> None:
-    _tablolar()
-    with store._lock:
-        store._db().execute("UPDATE hesaplar SET sid=? WHERE kullanici=?", (sid, kullanici))
-        store._db().commit()
+    store.yaz("UPDATE hesaplar SET sid=? WHERE kullanici=?", (sid, kullanici))
 
 
 def hesap_sil(kullanici: str) -> None:
     sid = gokyuzu(kullanici)
     if sid:
         store.delete(sid)
-    with store._lock:
-        db = store._db()
-        db.execute("DELETE FROM girisler WHERE kullanici=?", (kullanici,))
-        db.execute("DELETE FROM hesaplar WHERE kullanici=?", (kullanici,))
-        db.commit()
+    store.yaz("DELETE FROM girisler WHERE kullanici=?", (kullanici,))
+    store.yaz("DELETE FROM hesaplar WHERE kullanici=?", (kullanici,))
