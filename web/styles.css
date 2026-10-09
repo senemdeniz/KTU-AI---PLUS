@@ -536,13 +536,3 @@ button.ajan-kart:hover,button.ajan-kart:focus-visible{border-color:color-mix(in 
 .hata-satir:empty{display:none}
 .demo-link{margin-top:16px;display:inline-block}
 
-/* Karşılama görseli: sen ve ikizin */
-.karsilama-ikili{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px}
-.karsilama-ikili figure{margin:0;display:grid;justify-items:center;gap:6px;animation:suzul 6s ease-in-out infinite}
-.karsilama-ikili .k-ikiz{animation-delay:-3s}
-.karsilama-ikili figcaption{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:#f5d78e}
-.karsilama-ikili .k-ikiz figcaption{color:#8ea2ff}
-.k-bag{width:56px;height:2px;background:repeating-linear-gradient(90deg,#f5d78e 0 4px,transparent 4px 10px);opacity:.7}
-@keyframes suzul{50%{transform:translateY(-8px)}}
-@media (prefers-reduced-motion:reduce){.karsilama-ikili figure{animation:none}}
-@media (max-width:720px){.karsilama-ikili{display:none}}

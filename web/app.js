@@ -1,4 +1,4 @@
-import { arkaplan, takimyildiz, ikizGogu, egri, svg, avatarCiz, AVATAR_BICIM } from './sky.js';
+import { arkaplan, takimyildiz, ikizGogu, ikiliAnimasyon, egri, svg, avatarCiz, AVATAR_BICIM } from './sky.js';
 
 const _rc = Element.prototype.replaceChildren;
 Element.prototype.replaceChildren = function (...k) { return _rc.apply(this, k.flat().filter((x) => x != null && x !== false)); };
@@ -125,10 +125,7 @@ function karsilama(mod = 'kayit', onDoldur = '') {
         hesapFormu(mod, onDoldur),
         h('button', { class: 'baglanti demo-link', onclick: () => canliDemo() }, 'Kayıt olmadan canlı demoyu izle')),
       kap)));
-  kap.replaceChildren(h('div', { class: 'karsilama-ikili', 'aria-hidden': 'true' },
-    h('figure', { class: 'k-sen' }, avatarCiz(2, { yanik: 0.78, boyut: 220, etiket: 'Sen' }), h('figcaption', {}, 'Sen')),
-    h('span', { class: 'k-bag' }),
-    h('figure', { class: 'k-ikiz' }, avatarCiz(2, { renk: '#8ea2ff', yanik: 0.45, ayna: true, halka: true, boyut: 220, etiket: 'İkizin' }), h('figcaption', {}, 'İkizin'))));
+  ikiliAnimasyon(kap);
   modelRozeti();
   (onDoldur ? $('#h-sifre') : $('#h-kullanici'))?.focus();
 }
