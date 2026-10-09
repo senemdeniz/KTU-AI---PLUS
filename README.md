@@ -29,6 +29,14 @@ Bir **ajan ekibi (Gözlemevi)** seni rotanla karşılaştırır, plan tutmuyorsa
 
 ## Canlı demo özellikleri
 
+- **Süreyi sen seçersin:** hedefe kaç günde ulaşmak istediğini (7–90 gün) profilde seçersin; Haritacı planı o güne yayar. Sonradan değiştirirsen geçmiş günlerin korunur, kalan görevler yeni takvime dağıtılır.
+- **Profil sayfası:** ad, günlük süre, saat, seviye, hedef, sınav tarihi güncellenir; ekip planı anında ayarlar.
+- **Takımyıldızların:** birden çok konu açabilirsin; "Gökyüzüme dön" açtığın tüm takımyıldızları gösterir.
+- **Ekip zihin haritası:** Gözlemevi merkezde, üç akış (kurulum, otonom döngü, ikizine öğret) renkli; çalışan ajan ve devir çizgisi canlı. Bir ajana dokununca ürettiği çıktı anında gelir (kopyala / .md indir).
+- **Hakem anında yönlendirir:** sınavdan sonra hatalı ya da eksik cümleni işaretler, "Düzelt" ile cümleyi yazı alanına geri alır ve seni kaynağın o kavramı anlatan bölümüne götürür (örn. VisuAlgo: Linked List). Cevabı söylemez.
+- **Parlaklık = ikizinin başarısı:** hedefin parlaklığı, öğrettiğin kavramlarda ikizinin sınav başarısıdır.
+- **Beceri konuları (gitar):** ikizine nasıl çaldığını anlatırsın (parmak yerleşimi, geçiş, tempo); ilerlemen "Pratik kaydı" ile görünür olur: temiz çalabildiğin en yüksek tempo (BPM) kaydedilir, Gözcü bir öncekiyle karşılaştırır ve tempo eğrisi çizilir.
+
 - **Tek konuyla hızlı başlangıç:** konuyu yaz, ekip 21 günlük yol haritasını çıkarır (Gökyüzü → Yol haritan).
 - **Ajan sahnesi:** Ekip sekmesinde avatarlar, konuşan ajan parlaması, "yazıyor…" göstergesi, balonlu akış, devir/karar/koruma etiketleri.
 - **İlerlemeyi sen belirlersin:** Bugün sekmesinde görevleri işaretle ve "Günü bitir"; ya da İkizin → *Canlı demo kontrolü* ile "N gün geçti, planın %X'ini yaptım".
@@ -64,7 +72,7 @@ Mobil uygulama (Expo) aynı API'yi kullanır: `cd mobile && npm install && EXPO_
 
 Hiçbiri yoksa **demo modu** çalışır: içerik elle yazılmış (Türev ve Gitar için özel), akış ve karar mantığı gerçektir.
 
-Testler: `python -m pytest -q` (23 test). API sözleşmesi: [`docs/API.md`](docs/API.md). Jüri anlatımı: [`DEMO.md`](DEMO.md).
+Testler: `python -m pytest -q` (27 test). API sözleşmesi: [`docs/API.md`](docs/API.md). Jüri anlatımı: [`DEMO.md`](DEMO.md).
 
 ## Güvenlik önlemleri (özet)
 
@@ -73,7 +81,7 @@ Unicode normalleştirme (tam genişlik rakam, sıfır genişlikli karakter, Kiri
 ## Bilinen sınırlar
 
 - LLM yolu (Claude / Hugging Face) gerçek servislere karşı henüz denenmedi; yalnızca demo modu ve sahte uç nokta test edildi. Hugging Face'te JSON çıktı güvenilirliği ve Türkçe kalite modele göre denenmelidir. Ücretsiz HF hesaplarında aylık kredi yoktur (PRO: aylık 2$).
-- Doğrulanmış kaynak listesi yalnızca Veri Yapıları için var; diğer konularda arama bağlantısı verilir. Rakamla yazılmış telefon ("sıfır beş yüz…") ve kodlanmış (base64) kişisel veri yakalanmaz.
+- Elle doğrulanmış kaynak ve kavram bölümleri şimdilik Veri Yapıları, Türev ve Gitar için var; diğer konularda genel web araması yerine güvenilir platformların (MIT OCW, Khan Academy, Coursera, Vikipedi) konu sayfasına yönlendirilir. JustinGuitar'ın ücret bilgisi doğrulanmadı. Rakamla yazılmış telefon ("sıfır beş yüz…") ve kodlanmış (base64) kişisel veri yakalanmaz.
 - *Görev ver* yönlendirmesi anahtar kelimelidir; `kaynak` yalnızca kaynak türü önerir, bağlantı uydurmaz.
 - Eski Streamlit demosu (`app.py`) ve `examples_yks_ayt_matematik/` örnek içerik paketi olarak duruyor; ana ürün değildir.
 - 18 yaş altı için veli onayı akışı yok; destek hattı numaraları (112, ALO 183) yayından önce doğrulanmalı.
