@@ -7,6 +7,7 @@ Sözleşme: docs/API.md
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 import json
 import os
 import re
@@ -20,7 +21,7 @@ from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 import gozlemevi as g
 import guvenlik as gv
@@ -39,25 +40,46 @@ _SID_YOLU = re.compile(r"^/v2/sessions/([0-9a-f]{32})(/|$)")
 _CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
 _SINIR: dict[str, list[float]] = {}
-GENEL_LIMIT = int(os.environ.get("IKIZ_GENEL_LIMIT", 240))
-YAZMA_LIMIT = int(os.environ.get("IKIZ_YAZMA_LIMIT", 45))
-GOVDE_LIMIT = 20_000   # dakikada istek (IP başına) ve en büyük gövde (bayt)
+GENEL_LIMIT = int(os.environ.get("IKIZ_GENEL_LIMIT", 600))     # dakikada API isteği (istemci başına)
+YAZMA_LIMIT = int(os.environ.get("IKIZ_YAZMA_LIMIT", 60))      # dakikada yazma isteği
+GOVDE_LIMIT = 20_000                                            # en büyük gövde (bayt)
+# Codespaces, Render gibi bir proxy arkasında herkes aynı IP'den görünür; IKIZ_PROXY=1 ise gerçek istemci
+# adresi X-Forwarded-For başlığının ilk değerinden okunur. Proxy yokken bu başlığa güvenilmez (sahtelenebilir).
+PROXY_ARKASINDA = os.environ.get("IKIZ_PROXY") == "1"
+
+
+def istemci(request: Request) -> str:
+    if PROXY_ARKASINDA and (xff := request.headers.get("x-forwarded-for")):
+        return xff.split(",")[0].strip()[:64]
+    return request.client.host if request.client else "?"
+
+
+def _sinir_asildi(anahtar: str, limit: int, simdi: float) -> bool:
+    k = [x for x in _SINIR.get(anahtar, []) if simdi - x < 60]
+    if len(k) >= limit:
+        _SINIR[anahtar] = k
+        return True
+    k.append(simdi)
+    _SINIR[anahtar] = k
+    if len(_SINIR) > 20_000:                                    # bellek sınırı: eski kayıtları at
+        for a in [a for a, v in _SINIR.items() if not v or simdi - v[-1] > 60]:
+            _SINIR.pop(a, None)
+    return False
+
+
+def _sahip_kontrolu(sid: str, cerez: str | None) -> bool:
+    s = store.get(sid)
+    return not (s and s.get("sahip") and s["sahip"] != hesap.kim(cerez))
 
 
 @app.middleware("http")
 async def koruma(request: Request, call_next):
-    ip = request.client.host if request.client else "?"
+    ip = istemci(request)
     simdi = time.time()
     yazma = request.method in ("POST", "PATCH", "DELETE")
-    for anahtar, limit in ((ip + ":g", GENEL_LIMIT), (ip + ":w", YAZMA_LIMIT)):
-        if anahtar.endswith(":w") and not yazma:
-            continue
-        k = [x for x in _SINIR.get(anahtar, []) if simdi - x < 60]
-        if len(k) >= limit:
-            _SINIR[anahtar] = k
+    if request.url.path.startswith("/v2/"):                     # statik dosyalar (arayüz) sınıra sayılmaz
+        if _sinir_asildi(ip + ":g", GENEL_LIMIT, simdi) or (yazma and _sinir_asildi(ip + ":w", YAZMA_LIMIT, simdi)):
             return JSONResponse({"detail": "Çok fazla istek. Biraz bekle."}, status_code=429, headers={"Retry-After": "30"})
-        k.append(simdi)
-        _SINIR[anahtar] = k
     # CSRF: çerez SameSite=Lax; ek olarak yazma istekleri arayüzün eklediği özel başlığı taşımalı. Başka bir site
     # bu başlığı CORS ön onayı olmadan ekleyemez. Proxy (Codespaces, Render) arkasında da çalışır.
     if yazma and request.url.path.startswith("/v2/") and (
@@ -65,8 +87,8 @@ async def koruma(request: Request, call_next):
         return JSONResponse({"detail": "Bu istek başka bir siteden geldiği için reddedildi."}, status_code=403)
     # Hesaba bağlı bir gökyüzüne yalnızca sahibi erişir (misafir/demo gökyüzleri hariç).
     if (m := _SID_YOLU.match(request.url.path)):
-        s = store.get(m.group(1))
-        if s and s.get("sahip") and s["sahip"] != hesap.kim(request.cookies.get(CEREZ)):
+        # Veritabanı işi olay döngüsünü bekletmesin diye iş parçacığında yapılır.
+        if not await asyncio.to_thread(_sahip_kontrolu, m.group(1), request.cookies.get(CEREZ)):
             return JSONResponse({"detail": "Oturum bulunamadı"}, status_code=404)
     sinir = 6_000_000 if request.url.path.endswith("/teach/image") else 10_000_000 if request.url.path.endswith("/teach/audio") else GOVDE_LIMIT
     if int(request.headers.get("content-length") or 0) > sinir:
@@ -82,6 +104,24 @@ class SonTarih(BaseModel):
     baslik: str = Field(max_length=80)
     tarih: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
 
+    @field_validator("tarih")
+    @classmethod
+    def gercek_tarih(cls, v: str) -> str:
+        try:
+            dt.date.fromisoformat(v)
+        except ValueError as e:
+            raise ValueError("Geçerli bir tarih değil") from e
+        return v
+
+
+def _ad_temizle(v: str | None) -> str | None:
+    if v is None:
+        return v
+    v = v.strip()
+    if not v:
+        raise ValueError("Ad boş olamaz")
+    return v
+
 
 class OturumIstek(BaseModel):
     ad: str = Field(default="Elif", max_length=40)
@@ -96,6 +136,11 @@ class OturumIstek(BaseModel):
     avatar: int = Field(default=0, ge=0, le=3)
     misafir: bool = False   # giriş yapmadan izlenen canlı demo
 
+    @field_validator("ad")
+    @classmethod
+    def ad_bos_olamaz(cls, v: str | None) -> str | None:
+        return _ad_temizle(v)
+
 
 class GunIstek(BaseModel):
     gun: int = Field(default=1, ge=1, le=21)
@@ -104,7 +149,7 @@ class GunIstek(BaseModel):
 
 class MetinIstek(BaseModel):
     metin: str = Field(max_length=1600)
-    alan: str = "akademik"
+    alan: str | None = Field(default=None, max_length=20)   # yoksa o an öğretilen takımyıldız
 
 
 class SohbetIstek(BaseModel):
@@ -139,14 +184,15 @@ class HesapIstek(BaseModel):
 
 
 _GIRIS_DENEME: dict[str, list[float]] = {}
-GIRIS_LIMIT = int(os.environ.get("IKIZ_GIRIS_LIMIT", 8))      # 15 dakikada hatalı giriş / kayıt sayısı
+GIRIS_LIMIT = int(os.environ.get("IKIZ_GIRIS_LIMIT", 8))      # 15 dakikada hatalı giriş sayısı (IP ve kullanıcı başına)
+KAYIT_LIMIT = int(os.environ.get("IKIZ_KAYIT_LIMIT", 30))     # 15 dakikada yeni hesap sayısı (IP başına)
 
 
-def _deneme_asildi(*anahtarlar: str) -> bool:
+def _deneme_asildi(*anahtarlar: str, limit: int | None = None) -> bool:
     simdi = time.time()
     for a in anahtarlar:
         _GIRIS_DENEME[a] = [t for t in _GIRIS_DENEME.get(a, []) if simdi - t < 900]
-        if len(_GIRIS_DENEME[a]) >= GIRIS_LIMIT:
+        if len(_GIRIS_DENEME[a]) >= (limit or GIRIS_LIMIT):
             return True
     return False
 
@@ -163,20 +209,20 @@ def _ben(request: Request) -> dict:
 
 @app.post("/v2/auth/register")
 def kayit_ol(r: HesapIstek, request: Request, response: Response):
-    ip = request.client.host if request.client else "?"
-    if _deneme_asildi("kayit:" + ip):
+    ip = istemci(request)
+    if _deneme_asildi("kayit:" + ip, limit=KAYIT_LIMIT):
         raise HTTPException(429, "Çok fazla deneme. 15 dakika sonra tekrar dene.")
-    _GIRIS_DENEME.setdefault("kayit:" + ip, []).append(time.time())
     ok, sonuc = hesap.kayit(r.kullanici, r.sifre)
     if not ok:
         raise HTTPException(409 if "alınmış" in sonuc else 422, sonuc)
+    _GIRIS_DENEME.setdefault("kayit:" + ip, []).append(time.time())   # yalnızca açılan hesaplar sayılır
     _cerez_ver(request, response, sonuc)
     return {"kullanici": sonuc, "session_id": None}
 
 
 @app.post("/v2/auth/login")
 def giris_yap(r: HesapIstek, request: Request, response: Response):
-    ip = request.client.host if request.client else "?"
+    ip = istemci(request)
     k = hesap.normalize(r.kullanici)
     if _deneme_asildi("ip:" + ip, "k:" + k):
         raise HTTPException(429, "Çok fazla hatalı deneme. 15 dakika sonra tekrar dene.")
@@ -217,20 +263,23 @@ def oturum_ac(r: OturumIstek, request: Request):
     kullanici = None if r.misafir else hesap.kim(request.cookies.get(CEREZ))   # canlı demo hesaba yazılmaz
     if not kullanici and not r.misafir:
         raise HTTPException(401, "Gökyüzünü kaydetmek için önce kayıt ol ya da giriş yap.")
-    if kullanici and hesap.gokyuzu(kullanici):
-        raise HTTPException(409, "Zaten bir gökyüzün var. Yeni konu için takımyıldız ekle.")
     if not r.akademik and not r.hobi:
         raise HTTPException(422, "En az bir alan seç: akademik veya hobi")
     for alan_metni in (r.ad, r.akademik or "", r.hobi or "", r.hedef_notu, *[d.baslik for d in r.son_tarihler]):
-        d = gv.denetle(alan_metni) if alan_metni.strip() else None
+        d = gv.alan_denetle(alan_metni) if alan_metni.strip() else None
         if d and not d.izin:
             raise HTTPException(422, d.mesaj or "Bu alan kabul edilmedi")
     if not kullanici:
         store.eski_misafirleri_sil()
-    sid = g.yeni_oturum(r.ad, r.akademik, r.hobi, r.dakika, r.zaman, [d.model_dump() for d in r.son_tarihler], r.seviye, r.hedef_notu, r.sure, r.avatar,
-                        sahip=kullanici)
-    if kullanici:
-        hesap.gokyuzu_bagla(kullanici, sid)
+        sid = g.yeni_oturum(r.ad, r.akademik, r.hobi, r.dakika, r.zaman, [d.model_dump() for d in r.son_tarihler], r.seviye,
+                            r.hedef_notu, r.sure, r.avatar)
+    else:
+        with hesap.kullanici_kilidi(kullanici):                   # çift tıklama iki gökyüzü açmasın
+            if hesap.gokyuzu(kullanici):
+                raise HTTPException(409, "Zaten bir gökyüzün var. Yeni konu için takımyıldız ekle.")
+            sid = g.yeni_oturum(r.ad, r.akademik, r.hobi, r.dakika, r.zaman, [d.model_dump() for d in r.son_tarihler], r.seviye,
+                                r.hedef_notu, r.sure, r.avatar, sahip=kullanici)
+            hesap.gokyuzu_bagla(kullanici, sid)
     g._calistir(g.kurulum, sid)
     return {"session_id": sid}
 
@@ -317,8 +366,11 @@ def gorev_ver(sid: str, r: MetinIstek):
 @app.post("/v2/sessions/{sid}/proposals/{pid}/approve")
 def onayla(sid: str, pid: str):
     _var(sid)
-    if g.oneriyi_karara_bagla(sid, pid, True) is None:
+    p = g.oneriyi_karara_bagla(sid, pid, True)
+    if p is None:
         raise HTTPException(404, "Öneri bulunamadı")
+    if p["durum"] == "eskidi":
+        raise HTTPException(409, "Bu öneri hazırlandıktan sonra planın değişti; uygulanmadı. İstersen ekipten yeniden iste.")
     return g.gorunum(sid)
 
 
@@ -369,12 +421,17 @@ class ProfilIstek(BaseModel):
     son_tarihler: list[SonTarih] | None = Field(default=None, max_length=5)
     avatar: int | None = Field(default=None, ge=0, le=3)
 
+    @field_validator("ad")
+    @classmethod
+    def ad_bos_olamaz(cls, v: str | None) -> str | None:
+        return _ad_temizle(v)
+
 
 @app.patch("/v2/sessions/{sid}/profile")
 def profil(sid: str, r: ProfilIstek):
     _var(sid)
     for metin in (r.ad or "", r.hedef_notu or "", *[d.baslik for d in (r.son_tarihler or [])]):
-        d = gv.denetle(metin) if metin.strip() else None
+        d = gv.alan_denetle(metin) if metin.strip() else None
         if d and not d.izin:
             raise HTTPException(422, d.mesaj or "Bu alan kabul edilmedi")
     out = g.profil_guncelle(sid, {"ad": r.ad, "dakika": r.dakika, "zaman": r.zaman, "seviye": r.seviye, "not_": r.hedef_notu, "sure": r.sure, "avatar": r.avatar,
@@ -392,7 +449,7 @@ class TakimyildizIstek(BaseModel):
 @app.post("/v2/sessions/{sid}/tracks")
 def takimyildiz(sid: str, r: TakimyildizIstek):
     _var(sid)
-    d = gv.denetle(r.konu)
+    d = gv.alan_denetle(r.konu)
     if not d.izin:
         raise HTTPException(422, d.mesaj or "Bu konu kabul edilmedi")
     out = g.takimyildiz_ekle(sid, r.tur, r.konu.strip())
@@ -411,7 +468,7 @@ def ikiz_adlandir(sid: str, alan: str, r: IkizAdIstek):
     ad = gv.temizle(r.ad).strip()
     if not re.fullmatch(r"[A-Za-zÇĞİÖŞÜçğıöşü][A-Za-zÇĞİÖŞÜçğıöşü' -]{1,19}", ad):
         raise HTTPException(422, "İkiz adı yalnızca harflerden oluşmalı (2–20 karakter).")
-    d = gv.denetle(ad)
+    d = gv.alan_denetle(ad)
     if not d.izin:
         raise HTTPException(422, d.mesaj or "Bu ad kabul edilmedi")
     out = g.ikiz_adlandir(sid, alan, ad)
