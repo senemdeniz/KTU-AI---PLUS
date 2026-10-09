@@ -118,9 +118,9 @@ KAVRAM_BOLUM = {
 # Doğrulanmış liste olmayan konular: genel web araması yerine güvenilir öğrenme platformları
 GUVENILIR_PLATFORMLAR = [
     {"ad": "Ankara Üniversitesi Açık Ders (ANKADEM)", "neden": "Türkçe, ücretsiz üniversite ders malzemeleri.", "ara": "https://acikders.ankara.edu.tr/course/search.php?search=", "dil": "tr", "tur": "universite"},
-    {"ad": "Vikipedi (Türkçe)", "neden": "Kavramın Türkçe tanımı ve kaynakçası; ders yerine geçmez.", "ara": "https://tr.wikipedia.org/w/index.php?search=", "dil": "tr", "tur": "topluluk"},
+    {"ad": "Vikipedi (Türkçe)", "neden": "Kavramın Türkçe tanımı ve kaynakçası; ders yerine geçmez.", "ara": "https://tr.wikipedia.org/w/index.php?search=", "dil": "tr", "tur": "topluluk", "siniflar": ("teknik", "akademik", "beceri")},
     {"ad": "MIT OpenCourseWare", "neden": "Ücretsiz üniversite dersleri (İngilizce).", "ara": "https://ocw.mit.edu/search/?q=", "dil": "en", "tur": "universite"},
-    {"ad": "Khan Academy", "neden": "Kısa video ve anında puanlanan alıştırma (İngilizce).", "ara": "https://www.khanacademy.org/search?page_search_query=", "dil": "en", "tur": "kurum"},
+    {"ad": "Khan Academy", "neden": "Kısa video ve anında puanlanan alıştırma (İngilizce).", "ara": "https://www.khanacademy.org/search?page_search_query=", "dil": "en", "tur": "kurum", "siniflar": ("teknik", "akademik")},
     {"ad": "Coursera", "neden": "Üniversitelerin yapılandırılmış kursları (İngilizce; bir kısmı ücretli).", "ara": "https://www.coursera.org/search?query=", "dil": "en", "tur": "kurum"},
 ]
 
@@ -265,7 +265,69 @@ def _tip(konu: str) -> str | None:
     return None
 
 
-def _puan(k: dict, seviye: str, dakika: int) -> tuple[int, list[str]]:
+# ---- Konuya özgü araştırma stratejisi -------------------------------------------------------------
+# Türk birine İspanyolca öğretmek ile bir öğrenciye veri yapıları öğretmek aynı iş değildir:
+#   dil      → önce Türkçe açıklayan kaynak, sonra İngilizce üzerinden köprü, seviye yükselince hedef dilde malzeme
+#   teknik   → en kaliteli, uygulamalı kaynak (çoğu İngilizce) ana kaynak; Türkçe ders destek olarak
+#   akademik → kavramı en net anlatan + bol çözümlü örnek; dil ikincil
+#   beceri   → video + düzenli pratik aracı; dil neredeyse önemsiz
+_DILLER = ("ispanyolca", "ingilizce", "almanca", "fransizca", "italyanca", "japonca", "korece", "cince", "arapca", "rusca",
+           "portekizce", "yunanca", "felemenkce", "isvecce", "lehce", "farsca", "spanish", "german", "french", "japanese")
+_TEKNIK = ("veri yap", "data struct", "algoritma", "algorithm", "programlama", "python", "java", "yazilim", "web gelistirme",
+           "veritabani", "veri tabani", "siber", "bilgisayar ag", "makine ogren", "yapay zeka", "sql", "react", "linux")
+_BECERI = ("gitar", "guitar", "piyano", "keman", "bateri", "ukulele", "cizim", "resim", "yuzme", "yoga", "fotograf", "satranc",
+           "dans", "kosu", "boks", "yemek")
+
+STRATEJI = {
+    "dil": {"ad": "Dil öğrenimi", "ozet": "Türkçe konuşan biri için: önce Türkçe açıklayan kaynak, sonra İngilizce üzerinden köprü, seviye yükselince hedef dilde malzeme.",
+            "adimlar": ["Dil bilgisini Türkçe açıklamalarla kur", "İngilizce biliyorsan İngilizce arayüzlü resmî kursla genişlet", "A2 sonrası hedef dilde okuma ve dinleme"],
+            "dil_puani": {"Türkçe": 15, "İngilizce": 4, "hedef": -10}},
+    "teknik": {"ad": "Teknik konu", "ozet": "Kalite önce gelir: en iyi uygulamalı kaynaklar çoğunlukla İngilizcedir ve ana kaynak olur; Türkçe ders kavramları pekiştirmek için destektir.",
+               "adimlar": ["Uygulamalı, kod çalıştırabileceğin ana kaynak", "Yapıyı animasyonla gör", "Türkçe ders notuyla kavramı pekiştir"],
+               "dil_puani": {"Türkçe": 0, "İngilizce": 0, "hedef": 0}, "ana_tur": ("Etkileşimli kitap",)},
+    "akademik": {"ad": "Akademik konu", "ozet": "Kavramı en net anlatan ve bol çözümlü örnek veren kaynak seçilir; dil ikincil, Türkçe varsa küçük bir artı.",
+                 "adimlar": ["Çözümlü örnekli ders notu", "Kısa video ve anında puanlanan alıştırma", "Sezgi için görsel anlatım"],
+                 "dil_puani": {"Türkçe": 4, "İngilizce": 0, "hedef": 0}, "ana_tur": ("Ders notu",)},
+    "beceri": {"ad": "Beceri", "ozet": "Bir beceri okuyarak değil, izleyip tekrar ederek gelişir: adım adım video ders + ölçülebilir pratik aracı.",
+               "adimlar": ["Adım adım video ders", "Metronom ya da ölçüm aracıyla düzenli pratik", "Kaydını İkizine anlat"],
+               "dil_puani": {"Türkçe": 2, "İngilizce": 0, "hedef": 0}, "ana_tur": ("Video ders serisi",)},
+}
+
+
+def konu_sinifi(konu: str, alan_turu: str | None = None) -> str:
+    n = gv._norm(konu)
+    if any(d in n for d in _DILLER):
+        return "dil"
+    if any(b in n for b in _BECERI):
+        return "beceri"
+    if any(t in n for t in _TEKNIK):
+        return "teknik"
+    return "beceri" if alan_turu == "hobi" else "akademik"
+
+
+def _dil_kategorisi(dil: str) -> str:
+    if dil.startswith("Türkçe"):
+        return "Türkçe"
+    return "İngilizce" if dil.startswith("İngilizce") else "hedef"
+
+
+def _rol(k: dict, sinif: str, secim: bool) -> str:
+    kat = _dil_kategorisi(k.get("dil", ""))
+    if k["tur"] in ("Görsel araç", "Görsel anlatım"):
+        return "Görsel tamamlayıcı"
+    if k["tur"] == "Pratik aracı":
+        return "Pratik aracı"
+    if k["tur"] in ("Başvuru tablosu", "Resmî belge"):
+        return "Başvuru"
+    if sinif == "dil":
+        return {"Türkçe": "1. Türkçe temel", "İngilizce": "2. İngilizce köprü", "hedef": "3. Hedef dilde"}[kat]
+    if secim:
+        return "Ana kaynak"
+    return "Türkçe destek" if kat == "Türkçe" else "Ek ders"
+
+
+def _puan(k: dict, seviye: str, dakika: int, sinif: str = "akademik") -> tuple[int, list[str]]:
+    st = STRATEJI[sinif]
     p, neden = 50, []
     fark = _SEVIYE_SIRA[k["seviye"]] - _SEVIYE_SIRA.get(seviye, 0)
     if fark == 0:
@@ -276,8 +338,17 @@ def _puan(k: dict, seviye: str, dakika: int) -> tuple[int, list[str]]:
         p += 15; neden.append(f"günde {dakika} dakikaya bölünebiliyor")
     elif k["tempo"] == "uzun" and dakika <= 30:
         p -= 10; neden.append("uzun ve yoğun bir program")
-    if k.get("dil", "").startswith("Türkçe"):
-        p += 8; neden.append("Türkçe anlatım")
+    kat = _dil_kategorisi(k.get("dil", ""))
+    dp = st["dil_puani"][kat]
+    if kat == "hedef" and seviye != "baslangic":
+        dp = 6                                   # hedef dilde malzeme orta seviyeden sonra değerli
+    p += dp
+    if dp > 0 and kat == "Türkçe":
+        neden.append("Türkçe anlatım")
+    elif dp < 0:
+        neden.append("tamamen hedef dilde, başlangıç için erken")
+    if k["tur"] in st.get("ana_tur", ()):
+        p += 8; neden.append("bu tür konuda en etkili biçim")
     if k["ucretsiz"] is True:
         p += 10; neden.append("ücretsiz")
     elif k["ucretsiz"] is False:
@@ -307,37 +378,45 @@ Sadece şu JSON'u döndür:
 En fazla 4 öneri; "yaklasim" tek cümle; "sorgu" arama motoruna yazılacak kısa metin; Türkçe yaz."""
 
 
-def tara(konu: str, seviye: str = "baslangic", dakika: int = 30, not_: str = "") -> dict:
-    """{kaynak_turu: 'dogrulanmis'|'arama', secim, alternatifler, arama, yaklasim, dogrulama}"""
+def _strateji_ozeti(sinif: str, tip: str | None) -> dict:
+    st = STRATEJI[sinif]
+    out = {"sinif": sinif, "ad": st["ad"], "ozet": st["ozet"], "adimlar": st["adimlar"]}
+    if tip in _BAGLAM_NOTU:
+        out["not"] = _BAGLAM_NOTU[tip]
+    return out
+
+
+def tara(konu: str, seviye: str = "baslangic", dakika: int = 30, not_: str = "", alan_turu: str | None = None) -> dict:
+    """{kaynak_turu: 'dogrulanmis'|'platform', strateji, secim, alternatifler, yaklasim, dogrulama}"""
     seviye = seviye if seviye in _SEVIYE_SIRA else "baslangic"
     tip = _tip(konu)
+    sinif = konu_sinifi(konu, alan_turu)
+    strateji = _strateji_ozeti(sinif, tip)
     if tip:
         puanli = []
         for k in _KAYNAKLAR[tip]:
-            p, neden = _puan(k, seviye, dakika)
+            p, neden = _puan(k, seviye, dakika, sinif)
             puanli.append({**k, "puan": p, "neden": neden})
         puanli.sort(key=lambda x: -x["puan"])
-        for x in puanli:
+        for i, x in enumerate(puanli):
             x.update(guvenilirlik(x))
+            x["rol"] = _rol(x, sinif, i == 0)
         secim, alt = puanli[0], puanli[1:]
         secim["gerekce"] = f"{secim['tur']}: " + ", ".join(secim["neden"]) + ". " + secim["not"]
         for a in alt:
             a["gerekce"] = ", ".join(a["neden"]) + ". " + a["not"]
-        turkce = [x for x in puanli if x["dil"].startswith("Türkçe")]
-        yaklasim = ("Önce Türkçe anlatan güvenilir kaynakla temeli kur; İngilizce kaynakları yanında tamamlayıcı olarak kullan."
-                    if turkce else "Birincil kaynakla ilerle, görsel araç ve başvuru tablosunu yanında tamamlayıcı olarak kullan.")
-        if tip in _BAGLAM_NOTU:
-            yaklasim += " " + _BAGLAM_NOTU[tip]
+        yaklasim = strateji["ozet"] + (" " + strateji["not"] if strateji.get("not") else "")
         return {"kaynak_turu": "dogrulanmis", "dogrulama": f"Bağlantılar {DOGRULAMA_TARIHI} tarihinde elle açılıp kontrol edildi.",
-                "yaklasim": yaklasim, "secim": secim, "alternatifler": alt, "arama": [],
+                "strateji": strateji, "yaklasim": yaklasim, "secim": secim, "alternatifler": alt, "arama": [],
                 "ingilizce_terim": ingilizce_karsilik(konu)}
     # Doğrulanmış liste yok: Google araması yerine güvenilir platformların kendi içindeki konu sayfasına yönlendir.
     oneriler: list[dict] = []
     yaklasim = (f"“{konu}” için elle doğrulanmış bir kaynak listem yok. Seni genel web aramasına değil, "
-                "güvenilir öğrenme platformlarının bu konudaki sayfalarına götürüyorum.")
+                "güvenilir öğrenme platformlarının bu konudaki sayfalarına götürüyorum. " + strateji["ozet"])
     if not ia.is_mock():
         try:
-            out = ia.llm_json(_PROMPT, {"topic": konu, "level": seviye, "daily_minutes": dakika, "note": gv.maskele(not_)[:200]}, max_tokens=700)
+            out = ia.llm_json(_PROMPT, {"topic": konu, "level": seviye, "daily_minutes": dakika, "topic_kind": strateji["ad"],
+                                        "strategy": strateji["ozet"], "note": gv.maskele(not_)[:200]}, max_tokens=700)
             yaklasim = str(out.get("yaklasim", yaklasim))[:300]
             oneriler = [{"baslik": str(o.get("baslik", ""))[:90], "tur": str(o.get("tur", ""))[:20], "neden": str(o.get("neden", ""))[:160],
                          "sorgu": str(o.get("sorgu", konu))[:100]} for o in (out.get("oneriler") or [])[:4] if o.get("baslik")]
@@ -352,12 +431,17 @@ def tara(konu: str, seviye: str = "baslangic", dakika: int = 30, not_: str = "")
             en = None
     platformlar = []
     for p in GUVENILIR_PLATFORMLAR:
+        if sinif not in p.get("siniflar", STRATEJI):
+            continue                            # örn. Khan Academy dil öğretmez
         terim = konu.strip()[:100] if p["dil"] == "tr" else en
         if not terim:
             continue                            # İngilizce karşılığı bilinmiyorsa İngilizce platformda Türkçe kelimeyle aramayız
         platformlar.append({"ad": p["ad"], "neden": p["neden"], "dil": "Türkçe" if p["dil"] == "tr" else "İngilizce",
                             "terim": terim, "url": p["ara"] + quote_plus(terim), "guven": GUVEN[p["tur"]], "yayinci_turu": YAYINCI_TURU[p["tur"]]})
+    # Sıra stratejiye göre: dil konusunda Türkçe önce; teknik konuda kalite (İngilizce) önce
+    once = "İngilizce" if sinif == "teknik" else "Türkçe"
+    platformlar.sort(key=lambda x: x["dil"] != once)
     notu = "" if en else " Konunun İngilizce karşılığını bilmediğim için İngilizce platformlarda arama yapmadım."
     return {"kaynak_turu": "platform", "dogrulama": "Bu konu için tek bir kaynağı elle doğrulayamadım; aşağıdakiler güvenilir platformların konu sayfalarıdır." + notu,
-            "yaklasim": yaklasim, "secim": None, "alternatifler": [], "platformlar": platformlar, "model_onerileri": oneriler, "arama": [],
-            "ingilizce_terim": en}
+            "strateji": strateji, "yaklasim": yaklasim, "secim": None, "alternatifler": [], "platformlar": platformlar,
+            "model_onerileri": oneriler, "arama": [], "ingilizce_terim": en}
