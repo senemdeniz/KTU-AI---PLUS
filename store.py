@@ -70,3 +70,16 @@ def delete(sid: str) -> bool:
         cur = _db().execute("DELETE FROM sessions WHERE id=?", (sid,))
         _db().commit()
         return cur.rowcount > 0
+
+
+def eski_misafirleri_sil(saat: float = 24) -> int:
+    """Giriş yapmadan açılan demo gökyüzlerini bir gün sonra temizler."""
+    with _lock:
+        sinir = time.time() - saat * 3600
+        rows = _db().execute("SELECT id FROM sessions WHERE json_extract(data, '$.misafir') = 1 AND updated < ?", (sinir,)).fetchall()
+        for (sid,) in rows:
+            _cache.pop(sid, None)
+            _locks.pop(sid, None)
+        _db().execute("DELETE FROM sessions WHERE json_extract(data, '$.misafir') = 1 AND updated < ?", (sinir,))
+        _db().commit()
+        return len(rows)
