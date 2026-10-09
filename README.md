@@ -15,9 +15,17 @@
 | Gözcü | **kod** | İkizi ve riski deterministik hesaplar (`ikiz_ajan.py`) |
 | Yörüngeci | LLM | Plan gerideyse en hafif müdahaleyi seçer; küçüğü uygular, büyüğünü onaya sunar |
 | Rehber | LLM | Suçlamadan tek net adım önerir |
+| Konu Bekçisi | LLM + kod | Anlattığının seçilen konuyla bağını denetler; konu dışıysa İkiz'e ulaştırmaz, model yanıt vermezse kapalı kalır |
 | Kaşif · İkiz · Hakem | LLM | *İkizine öğret*: Kaşif referans cevabı saklar, İkiz yalnızca kullanıcının cümlelerini bilir, Hakem bağımsız doğrular |
 
 Üç akış: (1) kurulum hattı, (2) Ajan Akışı: Gözcü → Gözlemevi kararı → Yörüngeci → Rehber, (3) *İkizine öğret*: kısıtlı bilgi ile sınav.
+
+## Canlı demo özellikleri
+
+- **Tek konuyla hızlı başlangıç:** konuyu yaz, ekip 21 günlük yol haritasını çıkarır (Gökyüzü → Yol haritan).
+- **Ajan sahnesi:** Ekip sekmesinde avatarlar, konuşan ajan parlaması, "yazıyor…" göstergesi, balonlu akış, devir/karar/koruma etiketleri.
+- **İlerlemeyi sen belirlersin:** Bugün sekmesinde görevleri işaretle ve "Günü bitir"; ya da İkizin → *Canlı demo kontrolü* ile "N gün geçti, planın %X'ini yaptım".
+- **Sesli anlatım:** İkizine öğret ekranında 🎙️ (web: Chrome/Safari, tr-TR). Konuşma metne çevrilir, düzenlenir, sonra yazılı metinle aynı güvenlik + Konu Bekçisi denetiminden geçer.
 
 ## Güvenlik ve etik (`guvenlik.py`)
 
@@ -46,7 +54,7 @@ EXPO_PUBLIC_API_URL=http://localhost:8000 npx expo start --web   # ya da telefon
 
 Hiçbiri yoksa **demo modu** çalışır: içerik elle yazılmış (Türev ve Gitar için özel), akış ve karar mantığı gerçektir.
 
-Testler: `python -m pytest -q` (17 test). API sözleşmesi: [`docs/API.md`](docs/API.md). Jüri anlatımı: [`DEMO.md`](DEMO.md).
+Testler: `python -m pytest -q` (18 test). API sözleşmesi: [`docs/API.md`](docs/API.md). Jüri anlatımı: [`DEMO.md`](DEMO.md).
 
 ## Bilinen sınırlar
 
