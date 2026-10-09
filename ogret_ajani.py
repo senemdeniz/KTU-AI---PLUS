@@ -1,0 +1,311 @@
+"""
+Etkin öğrenme ajanları: "İkizin sınava giriyor"
+================================================
+Kullanıcı o gün öğrendiğini ikizine anlatır. Sonra:
+
+  Kaşif   → konunun kaynağından 3 sınav sorusu ve referans cevap hazırlar
+  İkiz    → soruları YALNIZCA kullanıcının anlattığı cümlelerle cevaplar,
+            her cevapta dayandığı cümlenin numarasını verir
+  Hakem   → cevapları referansla karşılaştırır, anlatımdaki boşlukları bulur
+            ve cevabı vermeden ipucu sorusu yazar
+  Gözlemevi (bu dosyadaki ikize_ogret fonksiyonu) sırayı yönetir, her adımı
+            Ajan Akışı'na olay olarak yayınlar ve yıldızın parlaklığına karar verir
+
+Yıldız seviyeleri: "sonuk" (öğretilmedi) → "parlak" (kısmen geçti) → "halkali" (tamamı geçti)
+
+API anahtarı yoksa demo modunda çalışır: İkiz, sorunun anahtar kavramları anlatımda
+geçiyor mu diye bakar. Böylece demo, gerçek anlatıma tepki veren tutarlı bir davranış gösterir.
+
+Deneme:  python ogret_ajani.py
+"""
+
+from __future__ import annotations
+
+import re
+import time
+from dataclasses import dataclass, field, asdict
+from typing import Callable
+
+import ikiz_ajan as ia
+
+# ---------------------------------------------------------------------------
+# Veri
+# ---------------------------------------------------------------------------
+
+@dataclass
+class ExamQuestion:
+    id: str
+    question: str
+    reference: str              # kaynaktaki doğru cevap (kullanıcıya gösterilmez)
+    key_points: list[str]       # cevabın olmazsa olmaz kavramları
+
+
+@dataclass
+class TwinAnswer:
+    question_id: str
+    answer: str
+    cited: list[int]            # dayandığı anlatım cümleleri (1'den başlar); boşsa "anlatılmadı"
+
+
+@dataclass
+class Verdict:
+    question_id: str
+    result: str                 # "dogru" | "eksik" | "yanlis" | "anlatilmadi"
+    hint: str | None            # cevabı vermeden kullanıcıyı düşündüren ipucu
+
+
+@dataclass
+class TeachResult:
+    topic: str
+    sentences: list[str]
+    exam: list[ExamQuestion]
+    answers: list[TwinAnswer]
+    verdicts: list[Verdict]
+    star: str                   # "sonuk" | "parlak" | "halkali"
+    score: int                  # doğru cevap sayısı
+    events: list[dict] = field(default_factory=list)
+
+
+Emit = Callable[[str, str, str], None]   # (ajan, mesaj, tür)
+
+# ---------------------------------------------------------------------------
+# Prompt'lar
+# ---------------------------------------------------------------------------
+
+KASIF_SINAV = """Sen Kaşif'sin: kullanıcının öğrendiği konu için sınav hazırlayan ajan.
+Sana konu ve günün görevi verilecek. Konunun doğru ve yaygın kabul gören bilgisine dayanarak
+tam olarak 3 kısa sınav sorusu hazırla.
+
+Kurallar:
+- Sorular ezber değil anlama ölçsün: biri "nasıl", biri "neden", biri bir uç durum ya da hata.
+- Her soru için 1-2 cümlelik referans cevap ve 2-4 anahtar kavram yaz.
+- Sorular günün görevinin kapsamını aşmasın.
+
+Sadece şu JSON'u döndür:
+{"questions": [{"id": "q1", "question": str, "reference": str, "key_points": [str]}]}"""
+
+IKIZ_SINAV = """Sen kullanıcının dijital ikizisin ve şu an sınavdasın.
+Bildiğin TEK şey, kullanıcının sana anlattığı numaralı cümlelerdir. Kendi genel bilgini
+KULLANAMAZSIN; bu kuralın tek istisnası yok.
+
+Her soru için:
+- Cevabı yalnızca anlatılan cümlelerden kur ve dayandığın cümle numaralarını "cited" alanına yaz.
+- Anlatımda cevabı kuracak bilgi yoksa answer = "Bunu bana anlatmadın." ve cited = [] yaz.
+- Anlatımda yanlış bir bilgi varsa onu olduğu gibi kullan; düzeltme senin işin değil.
+
+Sadece şu JSON'u döndür:
+{"answers": [{"question_id": str, "answer": str, "cited": [int]}]}"""
+
+HAKEM = """Sen Hakem'sin: ikizin sınav cevaplarını denetleyen ajan.
+Sana sorular, referans cevaplar, kullanıcının numaralı anlatımı ve ikizin cevapları verilecek.
+
+Her cevap için karar ver:
+- "dogru": referansın anahtar kavramlarını karşılıyor VE cited cümleler bunu gerçekten söylüyor.
+- "eksik": kısmen doğru, bir anahtar kavram eksik.
+- "yanlis": anlatımdaki yanlış bir bilgiye dayanıyor.
+- "anlatilmadi": ikiz "anlatmadın" dedi YA DA cevap cited cümlelerde olmayan bilgi içeriyor
+  (ikiz kendi bilgisini sızdırmışsa da bu karar verilir).
+
+"dogru" dışındaki her karar için kullanıcıya bir ipucu yaz: cevabı SÖYLEME, kullanıcının
+anlatımına ne eklemesi gerektiğini düşündüren tek bir soru sor.
+
+Sadece şu JSON'u döndür:
+{"verdicts": [{"question_id": str, "result": "dogru"|"eksik"|"yanlis"|"anlatilmadi", "hint": str|null}]}"""
+
+# ---------------------------------------------------------------------------
+# Demo modu (API anahtarı yokken): anlatıma gerçekten tepki veren kural tabanlı davranış
+# ---------------------------------------------------------------------------
+
+_DEMO_EXAMS = {
+    "pandas": [
+        ExamQuestion("q1", "pandas'ta bir tablodan belirli koşulu sağlayan satırları nasıl seçersin?",
+                     "Bir koşuldan True/False maskesi oluşturup df[maske] ile seçeriz, örn. df[df.yas > 30].",
+                     ["koşul", "maske", "df["]),
+        ExamQuestion("q2", "İki koşulu aynı anda uygulamak istersen ne yaparsın?",
+                     "Koşulları parantez içine alıp & (ve) veya | (veya) ile birleştiririz.",
+                     ["&", "|", "parantez"]),
+        ExamQuestion("q3", "Filtreledikten sonra satır numaraları neden atlamalı görünür, nasıl düzeltilir?",
+                     "Orijinal index korunur; reset_index(drop=True) ile yeniden numaralandırılır.",
+                     ["index", "reset_index"]),
+    ],
+}
+_DEMO_HINTS = {
+    "q1": "İkizin satırları neye göre seçeceğini bilmiyor. Seçimi yapan şeyin ne olduğunu anlattın mı?",
+    "q2": "Ya iki şart birden gerekirse? İkizine şartları nasıl birleştireceğini anlattın mı?",
+    "q3": "Filtreden sonra tabloya bir bak: sol taraftaki numaralara ne oluyor?",
+}
+
+
+def _norm(s: str) -> str:
+    return s.lower().replace("ı", "i").replace("İ", "i")
+
+
+def _demo_exam(topic: str) -> list[ExamQuestion]:
+    for key, exam in _DEMO_EXAMS.items():
+        if key in _norm(topic):
+            return exam
+    return _DEMO_EXAMS["pandas"]
+
+
+def _demo_answers(exam: list[ExamQuestion], sentences: list[str]) -> list[TwinAnswer]:
+    out = []
+    for q in exam:
+        hits = [i + 1 for i, s in enumerate(sentences) if any(_norm(k) in _norm(s) for k in q.key_points)]
+        if hits:
+            out.append(TwinAnswer(q.id, " ".join(sentences[i - 1] for i in hits[:2]), hits[:2]))
+        else:
+            out.append(TwinAnswer(q.id, "Bunu bana anlatmadın.", []))
+    return out
+
+
+def _demo_verdicts(exam: list[ExamQuestion], answers: list[TwinAnswer]) -> list[Verdict]:
+    out = []
+    for q, a in zip(exam, answers):
+        if not a.cited:
+            out.append(Verdict(q.id, "anlatilmadi", _DEMO_HINTS.get(q.id)))
+            continue
+        covered = sum(1 for k in q.key_points if _norm(k) in _norm(a.answer))
+        result = "dogru" if covered >= min(2, len(q.key_points)) else "eksik"
+        out.append(Verdict(q.id, result, None if result == "dogru" else _DEMO_HINTS.get(q.id)))
+    return out
+
+# ---------------------------------------------------------------------------
+# Ajan çağrıları
+# ---------------------------------------------------------------------------
+
+def split_sentences(text: str) -> list[str]:
+    parts = re.split(r"(?<=[.!?])\s+|\n+", text.strip())
+    return [p.strip() for p in parts if len(p.strip()) > 2]
+
+
+def kasif_sinav(topic: str, task_title: str) -> list[ExamQuestion]:
+    if ia.is_mock():
+        return _demo_exam(topic)
+    out = ia.llm_json(KASIF_SINAV, {"topic": topic, "task": task_title})
+    return [ExamQuestion(**q) for q in out["questions"]][:3]
+
+
+def ikiz_sinav(exam: list[ExamQuestion], sentences: list[str]) -> list[TwinAnswer]:
+    if ia.is_mock():
+        return _demo_answers(exam, sentences)
+    out = ia.llm_json(IKIZ_SINAV, {
+        "anlatim": {str(i + 1): s for i, s in enumerate(sentences)},
+        "sorular": [{"id": q.id, "question": q.question} for q in exam],   # referans İkiz'e verilmez
+    })
+    answers = [TwinAnswer(**a) for a in out["answers"]]
+    # Güvenlik kemeri: var olmayan cümleye atıf yapan cevabı "anlatılmadı" say
+    for a in answers:
+        a.cited = [c for c in a.cited if 1 <= c <= len(sentences)]
+    return answers
+
+
+def hakem(exam: list[ExamQuestion], sentences: list[str], answers: list[TwinAnswer]) -> list[Verdict]:
+    if ia.is_mock():
+        return _demo_verdicts(exam, answers)
+    out = ia.llm_json(HAKEM, {
+        "sorular": [asdict(q) for q in exam],
+        "anlatim": {str(i + 1): s for i, s in enumerate(sentences)},
+        "ikiz_cevaplari": [asdict(a) for a in answers],
+    })
+    verdicts = [Verdict(**v) for v in out["verdicts"]]
+    # Atıfsız "doğru" olamaz: ikiz kendi bilgisini sızdırmış demektir
+    by_id = {a.question_id: a for a in answers}
+    for v in verdicts:
+        if v.result == "dogru" and not by_id.get(v.question_id, TwinAnswer("", "", [])).cited:
+            v.result, v.hint = "anlatilmadi", v.hint or "Bu bilgiyi ikizine sen anlatmadın."
+    return verdicts
+
+# ---------------------------------------------------------------------------
+# Orkestrasyon: Gözlemevi
+# ---------------------------------------------------------------------------
+
+_EXAM_CACHE: dict[str, list[ExamQuestion]] = {}
+
+
+def ikize_ogret(topic: str, task_title: str, explanation: str, emit: Emit | None = None) -> TeachResult:
+    """Bir öğretme turunu baştan sona yürütür. Aynı konu için tekrar çağrıldığında aynı sınavı
+    kullanır; böylece kullanıcı anlatımını düzeltip ikizini yeniden sınava sokabilir."""
+    events: list[dict] = []
+
+    def _emit(agent: str, msg: str, kind: str = "info"):
+        e = {"t": round(time.time(), 2), "agent": agent, "message": msg, "kind": kind}
+        events.append(e)
+        if emit:
+            emit(agent, msg, kind)
+
+    sentences = split_sentences(explanation)
+    _emit("Gözlemevi", f"Öğretme turu başladı: {len(sentences)} cümlelik anlatım alındı.", "start")
+    if not sentences:
+        _emit("Gözlemevi", "Anlatım boş; ikizine en az birkaç cümle anlatmalısın.", "error")
+        return TeachResult(topic, [], [], [], [], "sonuk", 0, events)
+
+    retry = topic in _EXAM_CACHE
+    if not retry:
+        _emit("Gözlemevi", "Sınavı hazırlaması için Kaşif'e devrediyorum.", "handoff")
+        _EXAM_CACHE[topic] = kasif_sinav(topic, task_title)
+        _emit("Kaşif", f"{len(_EXAM_CACHE[topic])} soru hazırladı: biri nasıl, biri neden, biri uç durum.", "done")
+    else:
+        _emit("Gözlemevi", "Aynı sınav tekrar uygulanıyor; anlatım güncellendi.", "info")
+    exam = _EXAM_CACHE[topic]
+
+    _emit("Gözlemevi", "İkiz sınava giriyor. Yalnızca senin anlattıklarını biliyor.", "handoff")
+    answers = ikiz_sinav(exam, sentences)
+    unknown = sum(1 for a in answers if not a.cited)
+    _emit("İkiz", f"{len(answers)} soruyu cevapladı; {unknown} soruda 'bunu bana anlatmadın' dedi.", "done")
+
+    _emit("Gözlemevi", "Cevapları denetlemesi için Hakem'e devrediyorum.", "handoff")
+    verdicts = hakem(exam, sentences, answers)
+    score = sum(v.result == "dogru" for v in verdicts)
+    gaps = len(verdicts) - score
+    _emit("Hakem", f"{score}/{len(verdicts)} doğru. "
+          + (f"{gaps} boşluk için cevabı vermeden ipucu yazdı." if gaps else "Anlatımında boşluk yok."), "done")
+
+    star = "halkali" if score == len(exam) else "parlak" if score >= 1 else "sonuk"
+    label = {"halkali": "halkalı yıldız yandı", "parlak": "yıldız parlak ama halkasız",
+             "sonuk": "yıldız henüz sönük"}[star]
+    _emit("Gözlemevi", f"Karar: {label}.", "decision")
+    if star != "halkali":
+        _emit("Rehber", "Eksik kısmı ikizine bir iki cümleyle anlat, sonra yeniden sınava sok.", "advice")
+    else:
+        _emit("Rehber", "Konuyu başkasına anlatabilecek kadar biliyorsun. Bu yıldız kalıcı.", "advice")
+
+    return TeachResult(topic, sentences, exam, answers, verdicts, star, score, events)
+
+
+def public_view(r: TeachResult) -> dict:
+    """Arayüze gidecek görünüm: referans cevaplar ve anahtar kavramlar GİZLİ kalır."""
+    q_by = {q.id: q for q in r.exam}
+    a_by = {a.question_id: a for a in r.answers}
+    return {
+        "topic": r.topic, "star": r.star, "score": r.score, "total": len(r.exam),
+        "sentences": r.sentences, "events": r.events,
+        "items": [{
+            "question": q_by[v.question_id].question,
+            "twin_answer": a_by[v.question_id].answer,
+            "cited": a_by[v.question_id].cited,
+            "result": v.result,
+            "hint": v.hint,
+        } for v in r.verdicts],
+    }
+
+
+# ---------------------------------------------------------------------------
+if __name__ == "__main__":
+    topic, task = "pandas filtreleme", "İkizine pandas'ta filtrelemenin nasıl çalıştığını anlat"
+    show = lambda a, m, k: print(f"  [{a}] {m}")
+
+    print("1. TUR — eksik anlatım")
+    r1 = ikize_ogret(topic, task,
+                     "pandas'ta filtreleme için bir koşul yazıyoruz. Bu koşul her satır için True ya da False "
+                     "veren bir maske oluşturuyor. Sonra df[maske] diyerek sadece True olan satırları alıyoruz. "
+                     "Filtreden sonra index numaraları atlamalı kalıyor, reset_index ile düzeltiliyor.", show)
+    for it in public_view(r1)["items"]:
+        print(f"   - {it['result']:<11} {it['question']}\n     İkiz: {it['twin_answer'][:90]}\n     İpucu: {it['hint']}")
+
+    print("\n2. TUR — kullanıcı eksik cümleyi ekledi")
+    r2 = ikize_ogret(topic, task,
+                     "pandas'ta filtreleme için bir koşul yazıyoruz. Bu koşul her satır için True ya da False "
+                     "veren bir maske oluşturuyor. Sonra df[maske] diyerek sadece True olan satırları alıyoruz. "
+                     "İki koşul gerekiyorsa her birini parantez içine alıp & ile, birinden biri yeterliyse | ile birleştiriyoruz. "
+                     "Filtreden sonra index numaraları atlamalı kalıyor, reset_index ile düzeltiliyor.", show)
+    print(f"\nSonuç: 1. tur {r1.score}/3 → {r1.star}, 2. tur {r2.score}/3 → {r2.star}")
