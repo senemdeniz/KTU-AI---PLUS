@@ -6,7 +6,7 @@
 
 - **Sen:** bitirdiğin her görev bir yıldız yakar.
 - **Rota:** planı hiç aksatmasaydın bugün olacağın yer (kesikli çizgi). Aradaki fark "rotanın kaç yıldız gerisindesin" sorusunun cevabıdır.
-- **İkizin:** boş doğar ve **yalnızca senin öğrettiklerini bilir**. Plandaki her "anlat" kavramı ikizinin bir yıldızıdır: öğretmediysen sönük, kısmen doğruysa parlak, tamamen doğruysa halkalı. İkizin hiçbir zaman senden önde olamaz; sen öğrettikçe büyür.
+- **İkizlerin:** her takımyıldızın (konunun) **kendi ikizi** vardır (Vega, Altair…; adını değiştirebilirsin). Her ikiz boş doğar ve **yalnızca o konuda senin öğrettiklerini bilir**; bir ikize öğrettiğin diğerine geçmez. Plandaki her "anlat" kavramı ikizinin bir yıldızıdır: öğretmediysen sönük, kısmen doğruysa parlak, tamamen doğruysa halkalı. İkizin hiçbir zaman senden önde olamaz; sen öğrettikçe büyür.
 
 Bir **ajan ekibi (Gözlemevi)** seni rotanla karşılaştırır, plan tutmuyorsa planı kendisi değiştirir ve yaptığı her şeyi canlı bir akışta gösterir.
 
@@ -32,7 +32,12 @@ Bir **ajan ekibi (Gözlemevi)** seni rotanla karşılaştırır, plan tutmuyorsa
 - **Canlı demo (kendi kendine oynar):** karşılama sayfasında "Canlı demoyu izle". Gerçek API çağrılarıyla Elif'in gökyüzünü kurar, 3 gün ilerletir, ikizine "bağlı liste"yi bilerek bir hatayla anlatır, Hakem'in hatayı işaretleyip VisuAlgo'ya yönlendirmesini gösterir, cümleyi düzeltir ve yıldızı halkalı yapar (~40 sn). İstediğin an "Durdur".
 - **Logo → Takımyıldızların:** İkiz logosuna tıklayınca açtığın tüm konular, rotaları ve ikizinin yıldızlarıyla tek sayfada.
 - **Çıkış ve devam anahtarı:** "Çıkış yap" bu cihazdan çıkarır; gökyüzün sunucuda kalır. Gösterilen 32 karakterlik devam anahtarıyla (şifre gibi sakla) karşılama sayfasından geri dönersin.
-- **Bağlama duyarlı kaynaklar:** önce Türkçe anlatan güvenilir kaynak (ör. Ankara Üniversitesi Açık Ders), sonra İngilizce kaynaklar; İngilizce platformlarda konu İngilizce karşılığıyla aranır ("İspanyolca" → "Spanish"). Karşılığı bilinmiyorsa İngilizce platformda Türkçe kelimeyle arama yapılmaz.
+- **Konuya özgü kaynak stratejisi:** Kaynak Avcısı önce konunun türünü belirler ve her türde farklı arar; strateji Yol haritası sayfasında açıkça yazar, her kaynağın rolü etiketlenir.
+  - **Dil (İspanyolca, Almanca…):** Türkçe konuşan biri için 1) Türkçe açıklayan kaynak (Ankara Üni. İSP102/İSP111), 2) İngilizce üzerinden köprü (Instituto Cervantes AVE), 3) A2 sonrası hedef dilde malzeme (Centro Virtual Cervantes). Dil öğretmeyen platformlar (Khan Academy) elenir.
+  - **Teknik (Veri Yapıları, programlama):** kalite önce: uygulamalı İngilizce kaynak ana kaynak (Runestone), Türkçe ders (Ankara Üni. BLM267) destek.
+  - **Akademik (Türev):** çözümlü örnekli ders notu önce; **Beceri (Gitar):** video ders + metronom gibi pratik aracı.
+  - İngilizce platformlarda konu İngilizce karşılığıyla aranır ("İspanyolca" → "Spanish"); karşılık bilinmiyorsa Türkçe kelimeyle arama yapılmaz.
+- **Doğrudan giriş ve kullanıcı avatarı:** kayıtta kendi takımyıldız avatarını seçersin (sen = altın). Daha önce gökyüzü kurduysan site açılınca doğrudan uygulamaya girersin; karşılama ekranında beklemezsin.
 - **Kaynak güvenilirliği:** her kaynakta yayıncı (ör. NUS, MIT, Python Software Foundation), güven düzeyi (yüksek/orta/düşük), elle doğrulama tarihi ve "Bağlantıları şimdi kontrol et" ile gerçek bağlantı durumu. Kendi kaynağını ekleyebilir, birincil yapabilirsin; Kaynak Avcısı alan adından yayıncıyı değerlendirir. Yalnızca https; iç ağ/yerel adresler (SSRF) ve güvensiz yönlendirmeler reddedilir.
 - **İkizine öğret, kavram başına:** her kavramın cümleleri ayrı tutulur. İkizin sayfasında her kavram için "İkizin bu kavramı senden nasıl öğrendi?" açılır: ona anlattığın cümleler ve sınavdaki her sorunun sonucu. Daha kötü bir deneme, halkalı bilgiyi silmez.
 
@@ -79,7 +84,7 @@ Mobil uygulama (Expo) aynı API'yi kullanır: `cd mobile && npm install && EXPO_
 
 Hiçbiri yoksa **demo modu** çalışır: içerik elle yazılmış (Türev ve Gitar için özel), akış ve karar mantığı gerçektir.
 
-Testler: `python -m pytest -q` (31 test). API sözleşmesi: [`docs/API.md`](docs/API.md). Jüri anlatımı: [`DEMO.md`](DEMO.md).
+Testler: `python -m pytest -q` (33 test). API sözleşmesi: [`docs/API.md`](docs/API.md). Jüri anlatımı: [`DEMO.md`](DEMO.md).
 
 ## Görüntü ve ses (İkizine öğret)
 
