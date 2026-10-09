@@ -922,7 +922,7 @@ def _hakem_geri_bildirimi(g: dict, cumleler: list[str], kavram: str) -> dict:
     if duzelt:
         parcalar.append("düzeltilecek cümle: " + ", ".join(roman[c - 1] if c <= len(roman) else str(c) for c in sorted(duzelt)))
     ozet = ("Tüm sorular doğru; ikizin bu kavramı senden doğru öğrendi." if not parcalar
-            else "; ".join(parcalar).capitalize() + "." + (f" Bakman gereken yer: {yon[0]['baslik']}." if yon else ""))
+            else (lambda m: m[:1].upper() + m[1:])("; ".join(parcalar)) + "." + (f" Bakman gereken yer: {yon[0]['baslik']}." if yon else ""))
     return {"sorunlu": bool(parcalar), "duzelt": sorted(duzelt), "yanlis_sorular": yanlis_soru, "eksik_sorular": eksik_soru,
             "yonlendirme": yon, "ozet": ozet,
             "duzelt_metin": [{"no": c, "cumle": cumleler[c - 1]} for c in sorted(duzelt) if 0 < c <= len(cumleler)]}

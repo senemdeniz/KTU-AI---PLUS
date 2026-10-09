@@ -286,6 +286,18 @@ _DEMO_HINTS_Q.update({
 })
 
 
+# Demo modu: bilinen yanılgılar (cümle bunlardan birini içeriyorsa cevap "yanlış" sayılır)
+_DEMO_YANILGI = {
+    "Bağlı listede 5. elemana ulaşmak neden diziden yavaştır?": [r"indeks\w*\s+(ile\s+)?doğrudan", r"doğrudan\s+ulaş"],
+    "Bağlı listenin başına eleman eklemek neden hızlıdır?": [r"ekleme\w*\s+(her zaman\s+)?yavaş"],
+    "Hash tablosu her zaman O(1) müdür?": [r"her zaman\s+o\(1\)", r"hiç\s+çakışma\s+olmaz"],
+    "Sıralı sayıları sırayla eklersek ne olur?": [r"(her zaman|hep)\s+dengeli"],
+    "Ağırlıksız grafta en kısa yolu hangisi bulur?": [r"dfs\s+en\s+kısa"],
+    "Tempo ne zaman artırılmalı?": [r"hızlı\s+çal\w*\s+(ki|sonra)", r"hata\w*\s+(olsa da|olsa bile)"],
+    "Geçiş takılıyorsa tempoyu ne yaparsın?": [r"tempo\w*\s+artır"],
+}
+
+
 def _demo_kavram_sinavi(task_title: str) -> list[ExamQuestion] | None:
     n = _norm(task_title).translate(str.maketrans("ğüşöç", "gusoc"))
     return next((sinav for k, sinav in _DEMO_KAVRAM.items() if k in n), None)
@@ -336,6 +348,9 @@ def _demo_verdicts(exam: list[ExamQuestion], answers: list[TwinAnswer]) -> list[
             continue
         covered = sum(1 for k in q.key_points if _norm(k) in _norm(a.answer))
         result = "dogru" if covered >= min(2, len(q.key_points)) else "eksik"
+        if any(re.search(p, a.answer.lower()) for p in _DEMO_YANILGI.get(q.question, [])):
+            out.append(Verdict(q.id, "yanlis", _hint(q)))
+            continue
         # Yanlış genelleme: "her ... tepe/çukur" der ama işaret değişimini anlatmaz
         if "tepe" in _norm(q.question) and "her" in _norm(a.answer).split() and "işaret" not in _norm(a.answer):
             result = "yanlis"

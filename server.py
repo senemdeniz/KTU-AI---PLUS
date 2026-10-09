@@ -26,7 +26,7 @@ import store
 app = FastAPI(title="İkiz API", version="2.0")
 # Kimlik bilgisi (cookie) kullanılmaz; oturum kimliği 128 bitlik gizli bir değerdir. Üretimde IKIZ_CORS ile kısıtla.
 _IZIN = [o for o in os.environ.get("IKIZ_CORS", "*").split(",") if o]
-app.add_middleware(CORSMiddleware, allow_origins=_IZIN, allow_methods=["GET", "POST", "DELETE"], allow_headers=["Content-Type"])
+app.add_middleware(CORSMiddleware, allow_origins=_IZIN, allow_methods=["GET", "POST", "PATCH", "DELETE"], allow_headers=["Content-Type"])
 
 _CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
@@ -40,7 +40,7 @@ GOVDE_LIMIT = 20_000   # dakikada istek (IP başına) ve en büyük gövde (bayt
 async def koruma(request: Request, call_next):
     ip = request.client.host if request.client else "?"
     simdi = time.time()
-    yazma = request.method in ("POST", "DELETE")
+    yazma = request.method in ("POST", "PATCH", "DELETE")
     for anahtar, limit in ((ip + ":g", GENEL_LIMIT), (ip + ":w", YAZMA_LIMIT)):
         if anahtar.endswith(":w") and not yazma:
             continue
