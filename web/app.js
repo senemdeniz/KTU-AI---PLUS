@@ -90,7 +90,6 @@ function karsilama() {
         h('p', { class: 'alt' }, 'Ne öğrenmek istediğini yaz. Bir ajan ekibi sana rota çizer, kaynak bulur ve ilerlemeni izler. Öğrendiğini ikizine anlatırsın; ikizin yalnızca senin öğrettiklerinle büyür.'),
         h('div', { class: 'eylem' },
           h('button', { class: 'dugme', onclick: profil }, 'İkizini oluştur'),
-          S.sid ? h('button', { class: 'dugme ince', onclick: devam }, 'Gökyüzüme dön') : null,
           h('button', { class: 'dugme ince', onclick: () => canliDemo() }, 'Canlı demoyu izle')),
         S.sid ? null : anahtarFormu(),
         h('div', { class: 'ipucu-satiri' },
@@ -104,7 +103,7 @@ function karsilama() {
       if (!ok || !S.view || S.ekran !== 'karsilama') { ikiliAnimasyon(kap); return; }
       kap.replaceChildren(h('div', { class: 'donus' }, h('p', { class: 'sis' }, `${S.view.ad}, gökyüzün seni bekliyor`),
         ...S.view.alanlar.filter((a) => a.hazir).map((a) => h('div', { class: 'donus-kart' }, takimyildiz({ sen: a.ilerleme.sen_yildiz, rota: a.ilerleme.rota_yildiz, toplam: a.ilerleme.toplam_yildiz, w: 420, h: 170, etiket: false }),
-          h('b', {}, a.konu), h('span', { class: 'kucuk sis' }, `${a.ilerleme.sen_yildiz}/${a.ilerleme.toplam_yildiz} yıldız · ikizin %${a.ikiz.bilgi_yuzde}`)))));
+          h('b', {}, a.konu), h('span', { class: 'kucuk sis' }, `${a.ilerleme.sen_yildiz}/${a.ilerleme.toplam_yildiz} yıldız · ${ikizAdi(a)} %${a.ikiz.bilgi_yuzde}`)))));
     });
   } else ikiliAnimasyon(kap);
   api('/health').then((d) => {
@@ -128,9 +127,14 @@ function profil() {
   const prev = h('div', { class: 'ikili' });
   const ozet = h('div', { class: 'onizleme' });
   const secimi = (n) => document.querySelector(`input[name=${n}]:checked`)?.value;
+  let avatar = 0;
+  const avatarSecici = h('div', { class: 'avatar-secici', role: 'radiogroup', 'aria-label': 'Seni temsil eden takımyıldız' });
+  const avatarCizSecici = () => avatarSecici.replaceChildren(...AVATAR_BICIM.map((b, i) => h('button', { type: 'button', class: 'avatar-sec' + (i === avatar ? ' secili' : ''), role: 'radio', 'aria-checked': String(i === avatar),
+    onclick: () => { avatar = i; avatarCizSecici(); guncelle(); } }, h('span', { class: 'ic' }, avatarCiz(i, { yanik: 1, boyut: 52, etiket: b.ad }), h('span', {}, b.ad)))));
   const guncelle = () => {
     const doldu = [ad.value, konu.value, secimi('seviye'), secimi('dk'), secimi('alan'), secimi('sure')].filter(Boolean).length;
-    prev.replaceChildren(takimyildiz({ sen: doldu, rota: Math.min(doldu + 4, 18), toplam: 18, w: 420, h: 420, etiket: false }));
+    prev.replaceChildren(h('figure', { class: 'kayit-avatar' }, avatarCiz(avatar, { yanik: Math.max(0.15, doldu / 6), boyut: 300, etiket: ad.value.trim() || 'Sen' }),
+      h('figcaption', { class: 'sis kucuk' }, `${ad.value.trim() || 'Sen'} · ${AVATAR_BICIM[avatar].ad}`)));
     ozet.replaceChildren(h('b', {}, konu.value.trim() || 'Konunu yaz'), h('span', { class: 'sis kucuk' }, `${ad.value.trim() || 'Sen'} · günde ${secimi('dk') || '30'} dk · ${secimi('sure') || '21'} günlük yol`));
   };
   const form = h('form', { novalidate: true, onsubmit: async (e) => {
@@ -142,13 +146,15 @@ function profil() {
     try {
       const r = await api('/v2/sessions', 'POST', {
         ad: ad.value.trim(), akademik: alan === 'akademik' ? konu.value.trim() : null, hobi: alan === 'hobi' ? konu.value.trim() : null,
-        dakika: Number(secimi('dk')), zaman: secimi('zaman'), seviye: secimi('seviye'), hedef_notu: not_.value.trim(), sure: Number(secimi('sure')),
+        dakika: Number(secimi('dk')), zaman: secimi('zaman'), seviye: secimi('seviye'), hedef_notu: not_.value.trim(), sure: Number(secimi('sure')), avatar,
         son_tarihler: alan === 'akademik' && tarih.value ? [{ baslik: 'Sınav / teslim', tarih: tarih.value }] : [],
       });
       S.sid = r.session_id; depo.yaz(S.sid); S.olaylar = []; S.son = 0; S.view = null; kurulum();
     } catch (err) { hata.textContent = err.message; hata.hidden = false; dugme.disabled = false; dugme.textContent = 'İkizimi oluştur'; }
   } },
     h('div', { class: 'grup' }, h('label', { class: 'etiket', for: 'p-ad' }, 'Sana nasıl seslenelim?'), ad),
+    h('fieldset', { class: 'grup' }, h('legend', {}, 'Gökyüzünde seni hangi takımyıldız temsil etsin?'),
+      h('p', { class: 'kucuk sis2', style: 'margin:0 0 8px' }, 'Bu senin avatarın. Bitirdiğin görevlerle yıldızları yanar. Her konu için ayrı bir ikizin olacak; onlar da bu biçimin mavi, aynadaki hali.'), avatarSecici),
     h('div', { class: 'grup' }, h('label', { class: 'etiket', for: 'p-konu' }, 'Neyi öğrenmek istiyorsun?'), konu,
       h('div', { class: 'oneriler' }, ORNEKLER.map(([k, a]) => h('button', { type: 'button', class: 'oneri', onclick: () => { konu.value = k; document.querySelector(`input[name=alan][value=${a}]`).checked = true; guncelle(); } }, k)))),
     h('fieldset', { class: 'grup' }, h('legend', {}, 'Bu bir ders mi, hobi mi?'), h('div', { class: 'secenekler' }, sec('alan', 'akademik', 'Akademik', true), sec('alan', 'hobi', 'Hobi', false))),
@@ -166,7 +172,7 @@ function profil() {
       h('div', {}, h('h2', {}, 'Önce seni tanıyalım.'), h('p', { class: 'sis' }, 'Bu bilgiler yol haritanı ve ikizini kurar. Birkaç tıkla bitiyor.'), form),
       h('aside', {}, prev, ozet))));
   form.addEventListener('input', guncelle); form.addEventListener('change', guncelle);
-  guncelle(); konu.focus();
+  avatarCizSecici(); guncelle(); konu.focus();
 }
 
 /* ---------- 2 · ikizin oluşuyor ---------- */
@@ -260,13 +266,14 @@ function uygulama() {
   const navDugmeleri = (mobil) => SEKMELER.map(([k, ad]) => h('button', { class: 'nav-dugme', dataset: { sekme: k }, onclick: () => sekmeGit(k) }, ikonSvg(k), mobil ? kisa(ad) : ad, h('span', { class: 'sayac', hidden: true, dataset: { sayac: k } })));
   const kisa = (ad) => ({ 'Yol haritası': 'Harita', 'İkizine öğret': 'Öğret' }[ad] || ad);
   const kabuk = h('div', { class: 'kabuk' },
-    h('aside', { class: 'yan' }, logoDugmesi(), h('nav', { 'aria-label': 'Ana gezinme' }, navDugmeleri(false)),
+    h('aside', { class: 'yan' }, logoDugmesi(), h('button', { class: 'kullanici-cip', id: 'kullanici-cip', title: 'Profilin', onclick: () => sekmeGit('profil') }), h('nav', { 'aria-label': 'Ana gezinme' }, navDugmeleri(false)),
       h('div', { class: 'alt' }, h('span', { class: 'rozet', id: 'model-rozet' }, h('i'), '…'),
         h('button', { class: 'nav-dugme', dataset: { sekme: 'ayarlar' }, onclick: () => sekmeGit('ayarlar') }, ikonSvg('ayarlar'), 'Veriler ve güvenlik'),
         h('button', { class: 'nav-dugme', onclick: cikis }, ikonSvg('cikis'), 'Çıkış yap'))),
     h('div', { class: 'ana-kolon' }, h('div', { class: 'mobil-ust' }, logoDugmesi(), h('button', { class: 'baglanti', onclick: cikis }, 'Çıkış')), ana),
     h('nav', { class: 'mobil-nav', 'aria-label': 'Ana gezinme' }, navDugmeleri(true)));
   goster('uygulama', kabuk);
+  kullaniciCipi();
   api('/health').then((d) => { S.yetenek = d.yetenekler || {}; const r = $('#model-rozet'); if (r) { r.classList.toggle('canli', !d.demo); r.replaceChildren(h('i'), d.demo ? 'Demo modu' : `Canlı: ${d.model}`); } }).catch(() => {});
   S.panolar = {}; S.aktifPano = null;
   sekmeGit(S.sekme || 'gokyuzu');
@@ -290,8 +297,18 @@ function sekmeGit(k) {
   S.aktifPano.guncelle(S.view);
   scrollTo(0, 0);
 }
+/* Sen ve ikizlerin: kullanıcı altın avatar, her konunun kendi mavi ikizi */
+const senOrani = (v) => { const hz = v.alanlar.filter((a) => a.hazir); const t = hz.reduce((x, a) => x + a.ilerleme.toplam_yildiz, 0); return t ? hz.reduce((x, a) => x + a.ilerleme.sen_yildiz, 0) / t : 0; };
+const kullaniciAvatar = (v, boyut = 40) => avatarCiz(v.profil?.avatar || 0, { yanik: Math.max(0.12, senOrani(v)), boyut, etiket: v.ad });
+const ikizAvatar = (v, a, boyut = 90) => avatarCiz(v.profil?.avatar || 0, { renk: a.ikiz_kimlik?.renk || '#8ea2ff', yanik: (a.ikiz?.bilgi_yuzde || 0) / 100, ayna: true, halka: true, boyut, etiket: a.ikiz_kimlik?.ad || 'İkizin' });
+const ikizAdi = (a) => a.ikiz_kimlik?.ad || 'İkizin';
+function kullaniciCipi() {
+  const v = S.view; const el = $('#kullanici-cip'); if (!v || !el) return;
+  el.replaceChildren(h('span', { class: 'ic' }, kullaniciAvatar(v, 38), h('span', { class: 'cip-yazi' }, h('b', {}, v.ad), h('span', { class: 'kucuk sis' }, `${v.alanlar.length} takımyıldız · ${v.alanlar.length} ikiz`))));
+}
 function rozetler() {
   const v = S.view; if (!v) return;
+  kullaniciCipi();
   const say = { ekip: v.oneriler.length, bugun: v.bugun.filter((t) => !t.done).length };
   document.querySelectorAll('[data-sayac]').forEach((e) => { const n = say[e.dataset.sayac] || 0; e.hidden = !n; e.textContent = n; });
 }
@@ -305,7 +322,8 @@ function ikizOzeti(a, kompakt = false) {
   const sira = ik.siradaki;
   return h('section', { class: 'ikiz-ozet' + (kompakt ? ' kompakt' : '') },
     h('div', { class: 'ikiz-ozet-bas' },
-      h('div', {}, h('h3', {}, 'İkizin'), h('p', { class: 'sis kucuk' }, ik.ogretilen
+      h('span', { class: 'ikiz-mini', style: `--ikiz:${a.ikiz_kimlik?.renk || '#8ea2ff'}` }, ikizAvatar(S.view, a, 58)),
+      h('div', { style: 'flex:1' }, h('h3', {}, `${ikizAdi(a)} · ${a.konu} ikizin`), h('p', { class: 'sis kucuk' }, ik.ogretilen
         ? `${ik.kavram_sayisi} kavramdan ${ik.ogretilen} tanesini ona öğrettin. Bildiği her şeyi senden öğrendi.`
         : 'Henüz hiçbir şey bilmiyor. İlk kavramı ona sen öğreteceksin.')),
       h('b', { class: 'ikiz-yuzde' }, `%${ik.bilgi_yuzde}`)),
@@ -319,7 +337,7 @@ function takimyildizlarim(v, yenile) {
       h('span', { class: 'ic' },
         a.hazir ? h('span', { class: 'kart-gok' }, takimyildiz({ sen: a.ilerleme.sen_yildiz, rota: a.ilerleme.rota_yildiz, toplam: a.ilerleme.toplam_yildiz, w: 320, h: 150, etiket: false })) : h('span', { class: 'kuruluyor' }, yaziyor()),
         h('b', {}, a.konu),
-        h('span', { class: 'kucuk sis' }, a.hazir ? `${a.ilerleme.sen_yildiz}/${a.ilerleme.toplam_yildiz} yıldız · ikizin %${a.ikiz.bilgi_yuzde}` : 'Ekip kuruyor…'))))));
+        h('span', { class: 'kucuk sis' }, a.hazir ? `${a.ilerleme.sen_yildiz}/${a.ilerleme.toplam_yildiz} yıldız · ${ikizAdi(a)} %${a.ikiz.bilgi_yuzde}` : 'Ekip kuruyor…'))))));
 }
 function gokyuzuPano() {
   const el = h('div', {});
@@ -366,24 +384,46 @@ function guvenSatiri(k, kontrol) {
     k.url ? canliDurum(k.url, kontrol) : null);
 }
 function kaynakKarti(k, ana = false, kontrol = null) {
-  const etiketler = h('div', { class: 'etiketler' }, h('span', { class: 'etiket-k' }, k.tur), h('span', { class: 'etiket-k' }, ucretEtiketi(k)), h('span', { class: 'etiket-k' }, k.dil), k.puan != null ? h('span', { class: 'puan' }, `uygunluk ${k.puan}/100`) : null);
+  const etiketler = h('div', { class: 'etiketler' }, k.rol ? h('span', { class: 'rol-k' }, k.rol) : null, h('span', { class: 'etiket-k' }, k.tur), h('span', { class: 'etiket-k' }, ucretEtiketi(k)), h('span', { class: 'etiket-k' }, k.dil), k.puan != null ? h('span', { class: 'puan' }, `uygunluk ${k.puan}/100`) : null);
   const baslik = ana ? h('h3', {}, k.baslik) : h('h4', {}, k.baslik);
   const link = h('a', { class: ana ? 'dugme kucuk git' : '', href: guvenliUrl(k.url), target: '_blank', rel: 'noopener noreferrer' }, ana ? 'Bu kaynakla başla' : 'Kaynağı aç');
   return h('article', { class: ana ? 'kaynak-ana' : 'kaynak' }, etiketler, baslik, guvenSatiri(k, kontrol), h('p', { class: ana ? '' : 'kucuk sis' }, k.gerekce),
     h('p', { class: 'kucuk sis2' }, `Elle doğrulandı: ${k.dogrulama || ''}`), h('div', {}, link));
 }
+const SINIF_IKON = { dil: 'Aa', teknik: '{ }', akademik: 'Σ', beceri: '♪' };
+function stratejiKutusu(k) {
+  const st = k.strateji;
+  if (!st) return h('p', { class: 'sis' }, k.yaklasim);
+  return h('div', { class: 'strateji' },
+    h('div', { class: 'strateji-bas' }, h('span', { class: 'strateji-ikon', 'aria-hidden': 'true' }, SINIF_IKON[st.sinif] || '✦'),
+      h('div', {}, h('p', { class: 'ust-baslik' }, 'Kaynak Avcısı’nın araştırma stratejisi'), h('h4', {}, st.ad))),
+    h('p', { class: 'sis' }, st.ozet),
+    h('ol', { class: 'strateji-adim' }, st.adimlar.map((x) => h('li', {}, x))),
+    st.not ? h('p', { class: 'kucuk sis2' }, st.not) : null);
+}
 function kaynakBolumu(k, kontrol) {
   if (!k) return h('p', { class: 'sis' }, 'Kaynak taraması yok.');
+  const izgara = (baslik, xs, alt = null) => (xs.length ? h('div', { class: 'dil-grup' }, h('h4', {}, baslik), alt ? h('p', { class: 'kucuk sis2' }, alt) : null,
+    h('div', { class: 'kaynaklar-izgara' }, xs.map((x) => kaynakKarti(x, false, kontrol)))) : null);
+  const terimNotu = k.ingilizce_terim ? `İngilizce kaynaklarda konu “${k.ingilizce_terim}” olarak geçer; orada bu terimle ara.` : null;
   if (k.kaynak_turu === 'dogrulanmis') {
-    const tr_ = k.alternatifler.filter((x) => (x.dil || '').startsWith('Türkçe')), diger = k.alternatifler.filter((x) => !(x.dil || '').startsWith('Türkçe'));
-    return h('div', {}, h('p', { class: 'sis' }, k.yaklasim), kaynakKarti(k.secim, true, kontrol),
-      tr_.length ? h('div', { class: 'dil-grup' }, h('h4', {}, 'Türkçe kaynaklar'), h('div', { class: 'kaynaklar-izgara' }, tr_.map((x) => kaynakKarti(x, false, kontrol)))) : null,
-      diger.length ? h('div', { class: 'dil-grup' }, h('h4', {}, 'İngilizce ve diğer dillerde'), k.ingilizce_terim ? h('p', { class: 'kucuk sis2' }, `Bu kaynaklarda konu “${k.ingilizce_terim}” olarak geçer.`) : null,
-        h('div', { class: 'kaynaklar-izgara' }, diger.map((x) => kaynakKarti(x, false, kontrol)))) : null);
+    const alt = k.alternatifler, sinif = k.strateji?.sinif;
+    const TAMAMLAYICI = ['Görsel tamamlayıcı', 'Pratik aracı', 'Başvuru'];
+    let gruplar;
+    if (sinif === 'dil') {
+      gruplar = [izgara('1 · Türkçe temel', alt.filter((x) => x.rol === '1. Türkçe temel')),
+        izgara('2 · İngilizce üzerinden köprü', alt.filter((x) => x.rol === '2. İngilizce köprü'), terimNotu),
+        izgara('3 · Hedef dilde (A2 sonrası)', alt.filter((x) => x.rol === '3. Hedef dilde'))];
+    } else {
+      gruplar = [izgara(sinif === 'teknik' ? 'Destek ve derinleştirme' : 'Diğer dersler', alt.filter((x) => !TAMAMLAYICI.includes(x.rol)), terimNotu),
+        izgara(sinif === 'beceri' ? 'Pratik araçları' : 'Tamamlayıcı araçlar', alt.filter((x) => TAMAMLAYICI.includes(x.rol)))];
+    }
+    return h('div', {}, stratejiKutusu(k), kaynakKarti(k.secim, true, kontrol), ...gruplar);
   }
   if (k.kaynak_turu === 'platform') {
-    return h('div', {}, h('p', { class: 'sis' }, k.yaklasim),
-      ...['Türkçe', 'İngilizce'].map((dil) => { const ps = k.platformlar.filter((p) => p.dil === dil); return ps.length ? h('div', { class: 'dil-grup' },
+    const sira = k.strateji?.sinif === 'teknik' ? ['İngilizce', 'Türkçe'] : ['Türkçe', 'İngilizce'];
+    return h('div', {}, stratejiKutusu(k), k.strateji ? null : h('p', { class: 'sis' }, k.yaklasim),
+      ...sira.map((dil) => { const ps = k.platformlar.filter((p) => p.dil === dil); return ps.length ? h('div', { class: 'dil-grup' },
         h('h4', {}, dil === 'Türkçe' ? 'Türkçe güvenilir platformlar' : `İngilizce platformlar (“${ps[0].terim}” olarak aranır)`),
         h('div', { class: 'kaynaklar-izgara' }, ps.map((p) => h('article', { class: 'kaynak' }, h('h4', {}, p.ad),
           h('div', { class: 'guven-satiri' }, h('span', { class: `guven ${GUVEN_SINIF[p.guven] || 'dusuk'}` }, `Güven: ${p.guven}`), h('span', { class: 'kucuk sis' }, p.yayinci_turu)),
@@ -730,8 +770,9 @@ function ikizPano() {
   const guncelle = (v) => {
     const a = aktifAlan(), ik = a?.ikiz; if (!ik) { el.replaceChildren(h('p', { class: 'sis' }, 'İkizin doğuyor…')); return; }
     el.replaceChildren(
-      baslikSatiri('İkizin', 'İkizin boş doğdu ve yalnızca senin öğrettiklerini bilir. Senden önde olamaz; sen öğrettikçe büyür. İkizin bir yapay zekâ karakteridir.'),
-      alanSecici(() => guncelle(S.view)),
+      baslikSatiri('İkizlerin', 'Her konunun ilerlemesi farklı olduğu için her takımyıldızın kendi ikizi var. Her ikiz boş doğar ve yalnızca o konuda senin öğrettiklerini bilir; senden önde olamaz. İkizler yapay zekâ karakterleridir.'),
+      ikizSecici(v, () => guncelle(S.view)),
+      ikizKimlikKarti(v, a),
       h('div', { class: 'ikiz-gok' }, ikizGogu(ik.yildizlar, 760, 230)),
       h('div', { class: 'lejant' }, h('span', {}, h('i', { class: 'nokta-sonuk' }), 'Henüz öğretmedin'), h('span', {}, h('i', { class: 'nokta-mavi-dolu' }), 'Kısmen biliyor'), h('span', {}, h('i', { class: 'nokta-halkali' }), 'Tam biliyor')),
       h('div', { class: 'rakamlar', style: 'margin-top:26px;max-width:560px' },
@@ -868,8 +909,8 @@ function ogretPano() {
   const guncelle = (v) => {
     const a = aktifAlan(); const og = v.ogret; const bu = og.alan === a.alan;
     const konu = bu ? og.konu : a.konu.split('·').pop().trim();
-    baslikKap.replaceChildren(baslikSatiri('İkizine öğret', `Konu: ${konu}. Bir kavram seç, ikizine anlat, sınava sok. İkizin yalnızca o kavram için anlattıklarını bilir.`),
-      alanSecici(() => { const b = S.view.alanlar[S.alan]; kavramDegis(b.alan, b.ikiz?.siradaki?.id || 'serbest'); }));
+    baslikKap.replaceChildren(baslikSatiri(`İkizine öğret · ${ikizAdi(a)}`, `${ikizAdi(a)}, ${konu} ikizin. Bir kavram seç, ona anlat, sınava sok. Yalnızca o kavram için anlattıklarını bilir; diğer ikizlerin bunu duymaz.`),
+      ikizSecici(v, () => { const b = S.view.alanlar[S.alan]; kavramDegis(b.alan, b.ikiz?.siradaki?.id || 'serbest'); }));
     const acik = (a.ikiz?.yildizlar || []).filter((y) => y.acik && !y.id.startsWith('serbest-'));
     const secili = bu && og.kavram ? (og.kavram === 'serbest' ? '' : og.kavram) : (S.ogretGorev && acik.some((y) => y.id === S.ogretGorev) ? S.ogretGorev : (a.ikiz?.siradaki?.id || ''));
     if (!otoSecildi && (!bu || og.kavram == null) && a.hazir) { otoSecildi = true; kavramDegis(a.alan, secili || 'serbest'); return; }
@@ -904,26 +945,45 @@ function ogretPano() {
   return { el, guncelle };
 }
 
+function ikizSecici(v, onSec) {
+  return h('div', { class: 'ikiz-secici', role: 'group', 'aria-label': 'İkiz seç' }, v.alanlar.map((a, i) => h('button', { class: 'ikiz-sec' + (i === S.alan ? ' secili' : ''), 'aria-pressed': String(i === S.alan), style: `--ikiz:${a.ikiz_kimlik?.renk || '#8ea2ff'}`,
+    onclick: () => { S.alan = i; onSec(); } }, h('span', { class: 'ic' }, ikizAvatar(v, a, 46), h('span', { class: 'cip-yazi' }, h('b', {}, ikizAdi(a)), h('span', { class: 'kucuk sis' }, a.konu))))));
+}
+function ikizKimlikKarti(v, a) {
+  const ik = a.ikiz;
+  const girdi = h('input', { class: 'girdi', maxlength: 20, value: ikizAdi(a), 'aria-label': 'İkizin adı', style: 'max-width:200px' });
+  const form = h('form', { class: 'ikiz-ad-form koru', onsubmit: (e) => { e.preventDefault(); const ad = girdi.value.trim(); if (ad && ad !== ikizAdi(a)) yap(() => api(`/v2/sessions/${S.sid}/tracks/${a.alan}/twin`, 'PATCH', { ad }), `İkizinin yeni adı: ${ad}`); } },
+    girdi, h('button', { class: 'dugme ince kucuk', type: 'submit' }, 'Adını değiştir'));
+  return h('section', { class: 'ikiz-kimlik', style: `--ikiz:${a.ikiz_kimlik?.renk || '#8ea2ff'}` },
+    h('div', { class: 'ikiz-kimlik-avatar' }, ikizAvatar(v, a, 150)),
+    h('div', {},
+      h('p', { class: 'ust-baslik' }, `${a.konu} ikizin`),
+      h('h3', {}, ikizAdi(a)),
+      h('p', { class: 'sis' }, ik.ogretilen
+        ? `${a.konu} hakkında bildiği her şeyi senden öğrendi: ${ik.kavram_sayisi} kavramdan ${ik.ogretilen} tanesi. Diğer ikizlerin bunu bilmez.`
+        : `${a.ikiz_kimlik?.dogum ? `${a.ikiz_kimlik.dogum} tarihinde doğdu. ` : ''}${a.konu} hakkında henüz hiçbir şey bilmiyor; ilk kavramı ona sen öğreteceksin.`),
+      form));
+}
+
 /* ---------- Profil: sen ve ikizin, paralel takımyıldız avatarları ---------- */
 function profilHero(v) {
   const hazir = v.alanlar.filter((a) => a.hazir);
-  const top = (f) => hazir.reduce((s, a) => s + f(a), 0);
+  const top = (f) => hazir.reduce((x, a) => x + f(a), 0);
   const senYildiz = top((a) => a.ilerleme.sen_yildiz), toplam = Math.max(1, top((a) => a.ilerleme.toplam_yildiz));
-  const ogretilen = top((a) => a.ikiz.ogretilen), kavram = Math.max(1, top((a) => a.ikiz.kavram_sayisi));
-  const bilgi = hazir.length ? Math.round(top((a) => a.ikiz.bilgi_yuzde) / hazir.length) : 0;
   const seri = Math.max(0, ...hazir.map((a) => a.ilerleme.seri));
   const bicim = v.profil.avatar || 0;
-  const senOran = senYildiz / toplam, ikizOran = bilgi / 100;
   const secici = h('div', { class: 'avatar-secici', role: 'radiogroup', 'aria-label': 'Takımyıldız biçimin' }, AVATAR_BICIM.map((b, i) => h('button', { class: 'avatar-sec' + (i === bicim ? ' secili' : ''), role: 'radio', 'aria-checked': String(i === bicim),
-    onclick: () => yap(() => api(`/v2/sessions/${S.sid}/profile`, 'PATCH', { avatar: i }), `Takımyıldızın artık ${b.ad}`) }, h('span', { class: 'ic' }, avatarCiz(i, { yanik: 1, boyut: 44, etiket: b.ad }), h('span', {}, b.ad)))));
+    onclick: () => yap(() => api(`/v2/sessions/${S.sid}/profile`, 'PATCH', { avatar: i }), `Avatarın artık ${b.ad}`) }, h('span', { class: 'ic' }, avatarCiz(i, { yanik: 1, boyut: 44, etiket: b.ad }), h('span', {}, b.ad)))));
   return [
     h('div', { class: 'hero-ikili' },
-      h('figure', { class: 'hero-kisi sen' }, avatarCiz(bicim, { yanik: Math.max(senOran, 0.12), boyut: 190, etiket: v.ad }),
-        h('figcaption', {}, h('b', {}, v.ad), h('span', {}, `${senYildiz}/${toplam} yıldız yaktın`), h('span', {}, `Seri: ${seri} gün · ${hazir.length} takımyıldız`))),
-      h('div', { class: 'hero-bag', 'aria-hidden': 'true' }, h('span', { class: 'bag-cizgi', style: `--oran:${Math.max(ikizOran, 0.05)}` }), h('span', { class: 'kucuk sis2' }, 'öğrettikçe bağ güçlenir')),
-      h('figure', { class: 'hero-kisi ikiz' }, avatarCiz(bicim, { renk: '#8ea2ff', yanik: ikizOran, ayna: true, halka: true, boyut: 190, etiket: 'İkizin' }),
-        h('figcaption', {}, h('b', {}, `${v.ad}’in ikizi`), h('span', {}, `${ogretilen}/${kavram} kavramı senden öğrendi`), h('span', {}, `Bilgisi: %${bilgi}`)))),
-    h('div', { class: 'hero-alt' }, h('span', { class: 'kucuk sis' }, 'Takımyıldız biçimini seç; ikizin seninkinin aynadaki halidir.'), secici),
+      h('figure', { class: 'hero-kisi sen' }, kullaniciAvatar(v, 190),
+        h('figcaption', {}, h('b', {}, v.ad), h('span', {}, `Sen · ${AVATAR_BICIM[bicim].ad}`), h('span', {}, `${senYildiz}/${toplam} yıldız yaktın · seri ${seri} gün`))),
+      h('div', { class: 'hero-bag', 'aria-hidden': 'true' }, h('span', { class: 'bag-cizgi', style: '--oran:.6' }), h('span', { class: 'kucuk sis2' }, 'her konuya bir ikiz')),
+      h('div', { class: 'hero-ikizler' }, v.alanlar.map((a, i) => h('button', { class: 'hero-ikiz', style: `--ikiz:${a.ikiz_kimlik?.renk || '#8ea2ff'}`, title: `${ikizAdi(a)}: ${a.konu}`,
+        onclick: () => { S.alan = i; sekmeGit('ikiz'); } }, h('span', { class: 'ic' }, ikizAvatar(v, a, 96),
+          h('b', {}, ikizAdi(a)), h('span', { class: 'kucuk sis' }, a.konu),
+          h('span', { class: 'kucuk' }, a.hazir ? `${a.ikiz.ogretilen}/${a.ikiz.kavram_sayisi} kavram · %${a.ikiz.bilgi_yuzde}` : 'doğuyor…')))))),
+    h('div', { class: 'hero-alt' }, h('span', { class: 'kucuk sis' }, 'Avatarın sensin. İkizlerin seninkinin aynadaki hali; her biri yalnızca kendi konusunda öğrettiklerini bilir.'), secici),
   ];
 }
 
@@ -989,7 +1049,7 @@ function profilPano() {
     if (!kuruldu) { doldur(v); kuruldu = true; }
     heroKap.replaceChildren(...profilHero(v));
     $('#pr-takimlar', el).replaceChildren(...v.alanlar.map((a, i) => h('button', { class: 'takim-satir', onclick: () => { S.alan = i; sekmeGit('gokyuzu'); } },
-      h('span', { class: 'ic' }, h('b', {}, a.konu), h('span', { class: 'kucuk sis' }, a.hazir ? `${a.etiket} · ${a.ilerleme.sen_yildiz}/${a.ilerleme.toplam_yildiz} yıldız · ikizin %${a.ikiz.bilgi_yuzde}` : 'Ekip kuruyor…')))));
+      h('span', { class: 'ic' }, h('b', {}, a.konu), h('span', { class: 'kucuk sis' }, a.hazir ? `${a.etiket} · ${a.ilerleme.sen_yildiz}/${a.ilerleme.toplam_yildiz} yıldız · ${ikizAdi(a)} %${a.ikiz.bilgi_yuzde}` : 'Ekip kuruyor…')))));
   };
   return { el, guncelle };
 }
@@ -1028,16 +1088,17 @@ function takimlarPano() {
   const form = h('form', { class: 'takim-buyuk yeni koru', onsubmit: async (e) => {
     e.preventDefault(); const k = yeniKonu.value.trim(); if (!k) return;
     await yap(async () => { await api(`/v2/sessions/${S.sid}/tracks`, 'POST', { tur: yeniTur.value, konu: k }); yeniKonu.value = ''; }, 'Ekip yeni takımyıldızını kuruyor');
-  } }, h('h3', {}, 'Yeni takımyıldız aç'), h('p', { class: 'sis kucuk' }, 'Yeni bir konu ekle; ekip ona da rota, kaynak ve ikiz kurar.'),
+  } }, h('h3', {}, 'Yeni takımyıldız aç'), h('p', { class: 'sis kucuk' }, 'Yeni bir konu ekle; ekip ona rota çizer, konuya özgü kaynak arar ve o konu için yeni bir ikiz doğar.'),
     h('label', { class: 'etiket', for: 'tk-yeni' }, 'Konu'), yeniKonu, yeniTur, h('button', { class: 'dugme kucuk', type: 'submit' }, 'Takımyıldız aç'));
   const liste = h('div', { class: 'takim-izgara' });
-  el.append(baslikSatiri('Takımyıldızların', 'Şimdiye kadar açtığın tüm konular. Altın yıldızlar senin yaktıkların, mavi yıldızlar ikizine öğrettiklerin.'), liste);
+  el.append(baslikSatiri('Takımyıldızların', 'Şimdiye kadar açtığın tüm konular. Her konunun kendi ikizi var. Altın yıldızlar senin yaktıkların, ikizin yıldızları ona öğrettiklerin.'), liste);
   const guncelle = (v) => {
     liste.replaceChildren(...v.alanlar.map((a, i) => h('article', { class: 'takim-buyuk' },
       a.hazir ? h('div', { class: 'kart-gok' }, takimyildiz({ sen: a.ilerleme.sen_yildiz, rota: a.ilerleme.rota_yildiz, toplam: a.ilerleme.toplam_yildiz, w: 520, h: 230 })) : h('div', { class: 'kuruluyor' }, yaziyor()),
       h('div', { class: 'takim-buyuk-bas' }, h('div', {}, h('h3', {}, a.konu), h('p', { class: 'kucuk sis' }, `${a.etiket}${a.hazir ? ` · ${a.ilerleme.gun + 1}. gün / ${a.hedef.sure}` : ''}`)),
         a.hazir ? h('b', { class: 'ikiz-yuzde', title: 'İkizinin bilgisi' }, `%${a.ikiz.bilgi_yuzde}`) : null),
-      a.hazir ? h('div', { class: 'kart-ikiz' }, ikizGogu(a.ikiz.yildizlar.filter((y) => !y.id.startsWith('serbest-')), 520, 120, false)) : null,
+      a.hazir ? h('div', { class: 'kart-ikiz-satir', style: `--ikiz:${a.ikiz_kimlik?.renk || '#8ea2ff'}` }, h('div', { class: 'kart-ikiz-kim' }, ikizAvatar(S.view, a, 64), h('b', {}, ikizAdi(a)), h('span', { class: 'kucuk sis' }, 'bu konunun ikizi')),
+        h('div', { class: 'kart-ikiz' }, ikizGogu(a.ikiz.yildizlar.filter((y) => !y.id.startsWith('serbest-')), 520, 120, false))) : null,
       a.hazir ? h('p', { class: 'kucuk sis' }, `${a.ilerleme.sen_yildiz}/${a.ilerleme.toplam_yildiz} yıldız · ${a.ilerleme.fark > 0 ? `rotanın ${a.ilerleme.fark} yıldız gerisinde` : 'rotada'} · ikizine ${a.ikiz.ogretilen}/${a.ikiz.kavram_sayisi} kavram öğrettin`) : h('p', { class: 'kucuk sis' }, 'Ekip kuruyor…'),
       a.hazir ? h('div', { class: 'sag-eylem' }, dugme('Gökyüzünde aç', () => { S.alan = i; sekmeGit('gokyuzu'); }, 'kucuk'), dugme('İkizine öğret', () => { S.alan = i; sekmeGit('ogret'); }, 'ince kucuk')) : null)),
       form);
@@ -1071,7 +1132,7 @@ function cikis() {
           dugme('Ana sayfa', karsilama, 'ince')),
         view?.alanlar?.length ? h('div', { class: 'cikis-ozet' }, view.alanlar.filter((a) => a.hazir).map((a) => h('div', { class: 'donus-kart' },
           takimyildiz({ sen: a.ilerleme.sen_yildiz, rota: a.ilerleme.rota_yildiz, toplam: a.ilerleme.toplam_yildiz, w: 420, h: 150, etiket: false }),
-          h('b', {}, a.konu), h('span', { class: 'kucuk sis' }, `${a.ilerleme.sen_yildiz}/${a.ilerleme.toplam_yildiz} yıldız · ikizin %${a.ikiz.bilgi_yuzde}`)))) : null))));
+          h('b', {}, a.konu), h('span', { class: 'kucuk sis' }, `${a.ilerleme.sen_yildiz}/${a.ilerleme.toplam_yildiz} yıldız · ${ikizAdi(a)} %${a.ikiz.bilgi_yuzde}`)))) : null))));
 }
 function anahtarFormu() {
   const girdi = h('input', { class: 'girdi', id: 'anahtar', maxlength: 32, placeholder: 'Devam anahtarın (32 karakter)', autocomplete: 'off', spellcheck: 'false', style: 'max-width:360px' });
@@ -1164,4 +1225,8 @@ async function canliDemo() {
 /* ---------- başlangıç ---------- */
 arkaplan($('#gok'));
 S.sid = depo.oku();
-karsilama();
+if (S.sid) {
+  // Daha önce gökyüzü kurmuş kullanıcı karşılama ekranına takılmaz: doğrudan uygulamaya girer.
+  goster('yukleniyor', h('div', { class: 'sayfa yukleniyor' }, h('div', { class: 'yukleniyor-ic' }, SVG_YILDIZ(), h('p', { class: 'sis' }, 'Gökyüzün açılıyor…'))));
+  devam();
+} else karsilama();

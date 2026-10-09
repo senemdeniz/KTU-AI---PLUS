@@ -152,13 +152,13 @@ export function avatarCiz(bicim, { renk = '#f5d78e', yanik = 0, ayna = false, ha
   el.append(svg('circle', { cx: 50, cy: 55, r: 46, fill: `url(#${grad})`, opacity: 0.15 + 0.5 * (lit / n) }));
   b.k.forEach(([a, c]) => {
     const yan = a < lit && c < lit;
-    el.append(svg('line', { x1: P[a][0], y1: P[a][1], x2: P[c][0], y2: P[c][1], stroke: yan ? renk : '#2e3b75', 'stroke-width': yan ? 1.4 : 0.9, 'stroke-dasharray': halka && yan ? '3 3' : 'none', 'stroke-linecap': 'round' }));
+    el.append(svg('line', { x1: P[a][0], y1: P[a][1], x2: P[c][0], y2: P[c][1], stroke: renk, 'stroke-opacity': yan ? 1 : 0.28, 'stroke-width': yan ? 1.4 : 0.9, 'stroke-dasharray': halka && yan ? '3 3' : 'none', 'stroke-linecap': 'round' }));
   });
   P.forEach(([x, y], i) => {
     if (i < lit) {
       el.append(svg('circle', { cx: x, cy: y, r: 7, fill: renk, opacity: 0.12, class: 'avatar-isilti', style: `animation-delay:${(i * 0.37) % 2}s` }));
       el.append(halka ? svg('circle', { cx: x, cy: y, r: 3.2, fill: 'none', stroke: renk, 'stroke-width': 1.4 }) : svg('circle', { cx: x, cy: y, r: 3, fill: renk }));
-    } else el.append(svg('circle', { cx: x, cy: y, r: 1.8, fill: '#3a4888' }));
+    } else el.append(svg('circle', { cx: x, cy: y, r: 2, fill: renk, opacity: 0.45 }));
   });
   return el;
 }

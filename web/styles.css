@@ -497,3 +497,44 @@ textarea.girdi{min-height:92px;resize:vertical}
 .avatar-sec.secili{border-color:var(--altin);color:var(--altin)}
 @media (max-width:560px){.hero-ikili{grid-template-columns:1fr 1fr}.hero-bag{display:none}}
 [hidden]{display:none!important}
+
+/* Kaynak Avcısı strateji kutusu */
+.strateji{border:1px solid rgba(245,215,142,.22);background:linear-gradient(135deg,rgba(245,215,142,.06),rgba(142,162,255,.05));border-radius:16px;padding:16px 18px;margin-bottom:16px}
+.strateji-bas{display:flex;gap:12px;align-items:center}
+.strateji-bas h4{margin:2px 0 0;font-family:'Bricolage Grotesque',sans-serif;font-size:18px}
+.strateji-ikon{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:rgba(245,215,142,.12);color:#f5d78e;font-weight:700;font-size:15px;flex:none}
+.strateji .ust-baslik{margin:0;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#8ea2ff}
+.strateji-adim{margin:8px 0 4px;padding-left:20px;display:grid;gap:4px;color:#c9d0f5;font-size:14px}
+.strateji-adim li::marker{color:#f5d78e;font-weight:700}
+.rol-k{font-size:11px;padding:3px 8px;border-radius:999px;background:rgba(245,215,142,.14);color:#f5d78e;font-weight:600}
+
+/* Kullanıcı çipi ve konu başına ikizler */
+.kullanici-cip{all:unset;cursor:pointer;display:block;border:1px solid var(--cizgi);border-radius:14px;padding:8px 10px;background:rgba(245,215,142,.05)}
+.kullanici-cip:hover,.kullanici-cip:focus-visible{border-color:rgba(245,215,142,.45)}
+.kullanici-cip .ic,.ikiz-sec .ic{display:flex;align-items:center;gap:10px}
+.cip-yazi{display:grid;line-height:1.2;text-align:left}
+.cip-yazi b{font-size:14px}
+.ikiz-secici{display:flex;flex-wrap:wrap;gap:10px;margin:6px 0 18px}
+.ikiz-sec{all:unset;cursor:pointer;border:1px solid var(--cizgi);border-radius:14px;padding:6px 14px 6px 8px;background:rgba(255,255,255,.02)}
+.ikiz-sec.secili{border-color:var(--ikiz);box-shadow:0 0 0 1px var(--ikiz) inset,0 0 24px -8px var(--ikiz)}
+.ikiz-sec b{color:var(--ikiz)}
+.ikiz-kimlik{display:grid;grid-template-columns:auto 1fr;gap:22px;align-items:center;border:1px solid color-mix(in srgb,var(--ikiz) 35%,transparent);border-radius:20px;padding:18px 22px;margin-bottom:22px;background:radial-gradient(circle at 12% 50%,color-mix(in srgb,var(--ikiz) 14%,transparent),transparent 60%)}
+.ikiz-kimlik h3{margin:2px 0 6px;font-family:'Bricolage Grotesque',sans-serif;font-size:30px;color:var(--ikiz)}
+.ikiz-kimlik .ust-baslik,.strateji .ust-baslik{margin:0;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#8ea2ff}
+.ikiz-ad-form{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.ikiz-mini{flex:none;display:grid;place-items:center}
+.ikiz-ozet-bas{display:flex;align-items:center;gap:14px}
+.hero-ikizler{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;max-width:420px}
+.hero-ikiz{all:unset;cursor:pointer;border:1px solid color-mix(in srgb,var(--ikiz) 30%,transparent);border-radius:16px;padding:10px 12px;min-width:110px;background:color-mix(in srgb,var(--ikiz) 6%,transparent);transition:transform .2s}
+.hero-ikiz:hover,.hero-ikiz:focus-visible{transform:translateY(-2px);border-color:var(--ikiz)}
+.hero-ikiz .ic{display:grid;justify-items:center;gap:2px;text-align:center}
+.hero-ikiz b{color:var(--ikiz);font-family:'Bricolage Grotesque',sans-serif;font-size:17px}
+.kart-ikiz-satir{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center}
+.kart-ikiz-kim{display:grid;justify-items:center;text-align:center;line-height:1.2}
+.kart-ikiz-kim b{color:var(--ikiz)}
+.kayit-avatar{margin:0;display:grid;justify-items:center;gap:8px}
+.yukleniyor{min-height:80dvh;display:grid;place-items:center}
+.yukleniyor-ic{display:grid;justify-items:center;gap:10px;animation:nabiz 1.6s ease-in-out infinite}
+@keyframes nabiz{50%{opacity:.5}}
+@media (max-width:720px){.ikiz-kimlik{grid-template-columns:1fr;justify-items:center;text-align:center}.ikiz-ad-form{justify-content:center}.kart-ikiz-satir{grid-template-columns:1fr}}
+.kaynak-ana h3{overflow-wrap:anywhere}
