@@ -46,6 +46,12 @@ class MetinIstek(BaseModel):
     alan: str = "akademik"
 
 
+class SohbetIstek(BaseModel):
+    metin: str = Field(min_length=1, max_length=600)
+    ajan: str | None = None
+    alan: str | None = None
+
+
 class KararIstek(BaseModel):
     pass
 
@@ -181,3 +187,9 @@ def ogret_sil(sid: str):
 def ogret_sinav(sid: str):
     _var(sid)
     return g.ogret_sinav(sid)
+
+
+@app.post("/v2/sessions/{sid}/chat")
+def sohbet(sid: str, r: SohbetIstek):
+    _var(sid)
+    return g.sohbet(sid, r.metin, r.ajan, r.alan)

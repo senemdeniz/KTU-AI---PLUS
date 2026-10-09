@@ -90,3 +90,15 @@ def test_konu_bekcisi():
     assert r["ok"]
     ev = c.get(f"/v2/sessions/{sid}/events").json()["olaylar"]
     assert any(e["ajan"] == "Konu Bekçisi" and e["tur"] == "guard" for e in ev)
+
+
+def test_sohbet():
+    sid = yeni()
+    r = c.post(f"/v2/sessions/{sid}/chat", json={"metin": "Planım nasıl, geride miyim?"}).json()
+    assert r["ok"] and r["ajan"] == "Yörüngeci" and r["cevap"]
+    r = c.post(f"/v2/sessions/{sid}/chat", json={"metin": "Bugün motivasyonum yok", "ajan": "Rehber"}).json()
+    assert r["ok"] and r["ajan"] == "Rehber"
+    assert not c.post(f"/v2/sessions/{sid}/chat", json={"metin": "Ödevimi yap"}).json()["ok"]
+    assert not c.post(f"/v2/sessions/{sid}/chat", json={"metin": "Numaram 0532 123 45 67"}).json()["ok"]
+    v = c.get(f"/v2/sessions/{sid}").json()
+    assert len(v["sohbet"]) == 4 and "Rehber" in v["sohbet_ajanlari"]
