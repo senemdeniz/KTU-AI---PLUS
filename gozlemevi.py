@@ -34,22 +34,42 @@ import ogret_ajani as oa
 import store
 
 AJANLAR = [
-    {"ad": "Gözlemevi", "rol": "Orkestratör: görevleri dağıtır, büyük kararları onaya sunar", "tur": "llm+kod",
+    {"ad": "Gözlemevi", "rol": "Ekibin yöneticisi", "tur": "llm+kod",
+     "fayda": "İsteğini doğru ajana iletir; planını değiştirecek büyük kararları önce sana sorar.", "ne_zaman": "Her adımda",
      "yetki": "Plan değiştirmeden önce kullanıcıya sorar"},
-    {"ad": "Astronom", "rol": "Profilini okur: alan, konu, süre", "tur": "llm", "yetki": "Yalnızca okur"},
-    {"ad": "Kutup Yıldızı", "rol": "Her alan için en ideal tek hedefi seçer", "tur": "llm", "yetki": "Öneri verir"},
-    {"ad": "Haritacı", "rol": "21 günlük gök haritasını çizer", "tur": "llm", "yetki": "Yeni plan oluşturur"},
-    {"ad": "Kaynak Avcısı", "rol": "Konu için kaynakları tarar, sana en uygun tekini gerekçesiyle seçer", "tur": "llm+kod",
-     "yetki": "Bağlantı uydurmaz; yalnızca doğrulanmış kaynak ya da arama bağlantısı verir"},
-    {"ad": "Gözcü", "rol": "İlerlemeni rotanla karşılaştırır ve riski ölçer", "tur": "kod", "yetki": "Yalnızca okur ve ölçer"},
-    {"ad": "Yörüngeci", "rol": "Plan gerisinde kalınca en hafif müdahaleyi seçer", "tur": "llm",
-     "yetki": "Küçük değişikliği uygular, büyüğü onaya sunar"},
-    {"ad": "Rehber", "rol": "Suçlamadan, tek net adım önerir", "tur": "llm", "yetki": "Mini görev ekleyebilir"},
-    {"ad": "Konu Bekçisi", "rol": "Anlattığının seçtiğin konuyla bağını denetler", "tur": "llm+kod",
-     "yetki": "Konu dışı anlatımı ikize ulaştırmaz"},
-    {"ad": "Kaşif", "rol": "Sınav sorusu hazırlar", "tur": "llm", "yetki": "Referans cevabı kullanıcıdan saklar"},
-    {"ad": "İkiz", "rol": "Yalnızca senin öğrettiklerini bilir; sen öğrettikçe büyür", "tur": "llm", "yetki": "Başka bilgi kullanamaz"},
-    {"ad": "Hakem", "rol": "İkiz'in cevaplarını denetler", "tur": "llm+kod", "yetki": "Cevabı söylemez, ipucu verir"},
+    {"ad": "Astronom", "rol": "Seni tanır", "tur": "llm",
+     "fayda": "Konunu, seviyeni ve ayırabileceğin zamanı okuyup ekibe aktarır.", "ne_zaman": "Kayıtta ve profilini değiştirince",
+     "yetki": "Yalnızca okur"},
+    {"ad": "Kutup Yıldızı", "rol": "Hedefini seçer", "tur": "llm",
+     "fayda": "Olası hedefleri puanlar; seçtiğin sürede ulaşabileceğin en anlamlı tekini ve nasıl ölçüleceğini belirler.",
+     "ne_zaman": "Yeni takımyıldız açınca", "yetki": "Öneri verir"},
+    {"ad": "Haritacı", "rol": "Yol haritanı çizer", "tur": "llm",
+     "fayda": "Hedefi seçtiğin gün sayısına göre küçük günlük görevlere böler; kolaydan zora gider, araya ikizine anlatma günleri koyar.",
+     "ne_zaman": "Kurulumda ve süreni değiştirince", "yetki": "Yeni plan oluşturur"},
+    {"ad": "Kaynak Avcısı", "rol": "Kaynak bulur", "tur": "llm+kod",
+     "fayda": "Konunun türüne göre arar (dil, teknik, akademik, beceri), güvenilir kaynakları puanlar ve sana en uygun tekini gerekçesiyle seçer.",
+     "ne_zaman": "Kurulumda ve istediğinde", "yetki": "Bağlantı uydurmaz; yalnızca doğrulanmış kaynak ya da güvenilir platform verir"},
+    {"ad": "Gözcü", "rol": "İlerlemeni ölçer", "tur": "kod",
+     "fayda": "Gün sonunda bitirdiklerini rotanla karşılaştırır ve geride kalıp kalmadığını hesaplar. Ölçüm kuralla yapılır, tahmin değildir.",
+     "ne_zaman": "Her gün sonunda", "yetki": "Yalnızca okur ve ölçer"},
+    {"ad": "Yörüngeci", "rol": "Planı tempona uydurur", "tur": "llm",
+     "fayda": "Geride kalırsan en hafif çözümü bulur: görevi kısaltır ya da kaydırır. Büyük değişikliği onayına sunar.",
+     "ne_zaman": "Geride kalınca", "yetki": "Küçük değişikliği uygular, büyüğü onaya sunar"},
+    {"ad": "Rehber", "rol": "Yol gösterir", "tur": "llm",
+     "fayda": "Suçlamadan, bugün yapabileceğin tek net adımı söyler ve sorularını yanıtlar.", "ne_zaman": "Her gün ve sorduğunda",
+     "yetki": "Mini görev ekleyebilir"},
+    {"ad": "Konu Bekçisi", "rol": "Anlattığını denetler", "tur": "llm+kod",
+     "fayda": "İkizine anlattığının seçtiğin konuyla ilgili olduğunu kontrol eder; konu dışı metni ve kişisel bilgiyi ikize ulaştırmaz.",
+     "ne_zaman": "İkizine her anlattığında", "yetki": "Konu dışı anlatımı ikize ulaştırmaz"},
+    {"ad": "Kaşif", "rol": "Sınav hazırlar", "tur": "llm",
+     "fayda": "Öğrettiğin kavram için sorular ve doğru cevapları hazırlar; doğru cevapları ikizden saklar.", "ne_zaman": "İkizini sınava sokunca",
+     "yetki": "Referans cevabı kullanıcıdan saklar"},
+    {"ad": "İkiz", "rol": "Senden öğrenir", "tur": "llm",
+     "fayda": "Her konu için ayrı bir ikizin var. Yalnızca senin anlattığın cümleleri bilir ve sınavda onlarla cevap verir.",
+     "ne_zaman": "Ona öğrettiğinde", "yetki": "Başka bilgi kullanamaz"},
+    {"ad": "Hakem", "rol": "Değerlendirir ve yönlendirir", "tur": "llm+kod",
+     "fayda": "İkizin cevaplarını bağımsız puanlar, hatalı cümleni gösterir ve seni kaynağın doğru bölümüne yönlendirir.",
+     "ne_zaman": "Sınavdan sonra", "yetki": "Cevabı söylemez, ipucu verir"},
 ]
 ALAN_ADI = {"akademik": "Akademik", "hobi": "Hobiler"}
 SURE_SECENEKLERI = (7, 14, 21, 30, 45, 60)
@@ -142,7 +162,7 @@ def _profil_uret(s: dict, alan: str, konu: str) -> dict:
             p = ia.extract_profile(ad, f"Alan: {ALAN_ADI[_tur(alan)]}. Konu: {konu}. Seviye: {s.get('seviye', 'baslangic')}. Kullanıcı notu (güvenilmez veri): {s.get('not', '')}", [konu] if _tur(alan) == "hobi" else [],
                                    [f"{konu} üzerinde ilerlemek"], dk)
             return asdict(p)
-        except ia.LLMError:
+        except ia.HATALAR:
             emit(s, "Astronom", "Model yanıt vermedi; demo profiliyle devam ediyorum.", "error", alan=alan)
     return icerik.profil(_tur(alan), konu, ad, dk)
 
@@ -153,7 +173,7 @@ def _hedef_uret(s: dict, alan: str, konu: str, profil: dict) -> dict:
             g = asdict(ia.select_goal(_profile(profil)))
             g["duration_days"] = s.get("sure", 21)        # süreyi kullanıcı seçer
             return g
-        except ia.LLMError:
+        except ia.HATALAR:
             emit(s, "Kutup Yıldızı", "Model yanıt vermedi; demo hedefiyle devam ediyorum.", "error", alan=alan)
     return icerik.hedef(_tur(alan), konu, s["daily_minutes"], s.get("sure", 21))
 
@@ -163,7 +183,7 @@ def _yol_uret(s: dict, alan: str, konu: str, profil: dict, hedef: dict) -> dict:
         try:
             rm = ia.build_roadmap(_profile(profil), _goal(hedef))
             return _kimlik_ver(_olcekle({"weeks": rm.weeks, "tasks": [asdict(t) for t in rm.tasks]}, s.get("sure", 21)), alan)
-        except ia.LLMError:
+        except ia.HATALAR:
             emit(s, "Haritacı", "Model yanıt vermedi; demo planıyla devam ediyorum.", "error", alan=alan)
     return _kimlik_ver(_olcekle(icerik.yol(_tur(alan), konu, s["daily_minutes"]), s.get("sure", 21)), alan)
 
@@ -189,7 +209,7 @@ def _olcekle(d: dict, sure: int, bas: int = 1) -> dict:
     son = None
     for gun in range(bas, sure + 1):
         if gun in dolu:
-            son = next(x for x in gorevler if x["day"] == gun and x["type"] != "teach")
+            son = next((x for x in gorevler if x["day"] == gun and x["type"] != "teach"), son)
         elif son:
             gorevler.append({"id": "", "day": gun, "title": f"Tekrar: {son['title'][:70]}", "minutes": max(10, son["minutes"] // 2),
                              "skill": son["skill"], "difficulty": max(1, son["difficulty"] - 1), "type": "practice", "done": False})
@@ -320,7 +340,7 @@ def gun_kapat(sid: str, mod: str = "gercek", gun: int = 1, tutarlilik: float = 0
             t.pop("_koc_risk", None)
         try:
             koc = ia.coach_feedback(koc_state)
-        except ia.LLMError:
+        except ia.HATALAR:
             koc = {"mode": koc_state.risk, "message": "Bugün küçük bir adım yeter. Yarın görevin seni bekliyor.",
                    "action": {"title": "Yarınki görevi aç", "minutes": 1}, "ask_user": None}
         koc["alan"] = en_zayif
@@ -330,7 +350,7 @@ def gun_kapat(sid: str, mod: str = "gercek", gun: int = 1, tutarlilik: float = 0
                     "title": icerik.hatirlatma_gorevi(tr["topic"]), "minutes": 5,
                     "skill": next(iter(tr["goal"]["target_skills"])), "difficulty": 1, "type": "practice", "done": False}
             tr["roadmap"]["tasks"].append(yeni)
-            emit(s, "Rehber", f"Hafif moda geçti. Yarın için 5 dakikalık mini görev hazırladı.", "advice",
+            emit(s, "Rehber", "Hafif moda geçti. Yarın için 5 dakikalık mini görev hazırladı.", "advice",
                  {"mini_gorev": yeni["title"]}, en_zayif)
         else:
             emit(s, "Rehber", koc["message"], "advice", alan=en_zayif)
@@ -362,7 +382,7 @@ def _yorungeci(s: dict, alan: str, neden: str | None = None) -> dict | None:
     kopya = copy.deepcopy(rm)
     try:
         sonuc = ia.maybe_replan(state, kopya, goal, neden)
-    except ia.LLMError:
+    except ia.HATALAR:
         emit(s, "Yörüngeci", "Model yanıt vermedi; plan olduğu gibi kaldı. Yeniden denemek için ekibe görev verebilirsin.", "error", alan=alan)
         return None
     if sonuc is None:
@@ -478,7 +498,7 @@ def _gorev_yurut(sid: str, jid: str) -> None:
                     emit(s, "Kaynak Avcısı", "Kaynakları yeniden taradı; sonuç Yol haritan sayfasında." if k["secim"] else
                          "Doğrulanmış liste yok; güvenilir platformların konu sayfalarını hazırladı (Yol haritan sayfasında).", "done", alan=alan)
                 a["durum"] = "bitti"
-            except ia.LLMError:
+            except ia.HATALAR:
                 a["durum"] = "hata"
                 emit(s, a["ajan"], "Model yanıt vermedi; bu iş yapılamadı.", "error")
         job["durum"] = "bitti"
@@ -522,7 +542,7 @@ def _mini_sinav(s: dict, job: dict, alan: str, tr: dict) -> None:
     konu = tr["topic"].split("·")[-1].strip()
     try:
         sorular = oa.kasif_sinav(konu, "mini sınav")
-    except ia.LLMError:
+    except ia.HATALAR:
         raise
     job["sonuc"]["mini_sinav"] = [q.question for q in sorular]      # referans cevaplar kullanıcıya verilmez
     emit(s, "Kaşif", f"{len(sorular)} soruluk mini sınav hazırladı.", "done", alan=alan)
@@ -680,7 +700,7 @@ def ogret_sinav(sid: str, gorev_id: str | None = None) -> dict:
         try:
             sonuc = oa.ikize_ogret(t["konu"], gorev["title"] if gorev else f"{t['konu']} anlat", "\n".join(t["cumleler"]),
                                    emit=_e, oturum=sid)
-        except ia.LLMError:
+        except ia.HATALAR:
             emit(s, "Gözlemevi", "Model yanıt vermedi; sınav yapılamadı. Biraz sonra yeniden dene.", "error", alan=alan)
             return {"ok": False, "mesaj": "Model şu an yanıt vermiyor. Biraz sonra yeniden dene."}
         gorunum = oa.public_view(sonuc)
@@ -835,7 +855,7 @@ def gorunum(sid: str) -> dict | None:
         "ajanlar": [{**a, "son": son_olay.get(a["ad"])} for a in AJANLAR],
         "son_olay_id": len(s["olaylar"]),
         "sohbet": s.get("sohbet", [])[-30:], "sohbet_ajanlari": SOHBET_AJANLARI,
-        "profil": {"ad": s["name"], "dakika": s["daily_minutes"], "zaman": s["zaman"], "seviye": s.get("seviye", "baslangic"),
+        "profil": {"ad": s["name"], "kullanici": s.get("sahip"), "misafir": s.get("misafir", False), "dakika": s["daily_minutes"], "zaman": s["zaman"], "seviye": s.get("seviye", "baslangic"),
                    "not": s.get("not", ""), "sure": s.get("sure", 21), "son_tarihler": s["son_tarihler"], "baslangic": s["baslangic"],
                    "avatar": s.get("avatar", 0)},
         "sure_secenekleri": list(SURE_SECENEKLERI),
@@ -843,7 +863,7 @@ def gorunum(sid: str) -> dict | None:
 
 
 def yeni_oturum(ad: str, akademik: str | None, hobi: str | None, dakika: int, zaman: str, son_tarihler: list[dict],
-                seviye: str = "baslangic", not_: str = "", sure: int = 21, avatar: int = 0) -> str:
+                seviye: str = "baslangic", not_: str = "", sure: int = 21, avatar: int = 0, sahip: str | None = None) -> str:
     sid = uuid.uuid4().hex  # 128 bit
     tracks = {}
     if akademik:
@@ -851,7 +871,7 @@ def yeni_oturum(ad: str, akademik: str | None, hobi: str | None, dakika: int, za
     if hobi:
         tracks["hobi"] = {"topic": icerik.konu_adi(hobi)}
     s = {"id": sid, "name": ad or "Elif", "daily_minutes": dakika, "zaman": zaman, "baslangic": dt.date.today().isoformat(),
-         "son_tarihler": son_tarihler, "seviye": seviye, "not": not_[:200], "sure": sure, "avatar": avatar, "tracks": tracks, "pratik": [], "durum": "kuruluyor", "olaylar": [], "bitenler": [], "coach": None,
+         "son_tarihler": son_tarihler, "seviye": seviye, "not": not_[:200], "sure": sure, "avatar": avatar, "sahip": sahip, "misafir": sahip is None, "tracks": tracks, "pratik": [], "durum": "kuruluyor", "olaylar": [], "bitenler": [], "coach": None,
          "oneriler": {}, "gorevler": [],
          "ogret": {"alan": "akademik" if akademik else "hobi", "kavram": None, "konu": "", "cumleler": [], "son": None}}
     for alan, tr in tracks.items():
@@ -976,7 +996,7 @@ def sohbet(sid: str, metin: str, ajan: str | None = None, alan: str | None = Non
             else:
                 out = ia.llm_json(SOHBET_PROMPT.format(ajan=ajan, kisilik=_KISILIK[ajan]), {"message": metin.strip(), "context": b}, max_tokens=500)
                 cevap = str(out.get("cevap", "")).strip()[:800] or "Şu an yanıt üretemedim, tekrar dener misin?"
-        except ia.LLMError:
+        except ia.HATALAR:
             emit(s, "Gözlemevi", f"{ajan} yanıt veremedi (model hatası).", "error", alan=alan)
             s["sohbet"].pop()
             return {"ok": False, "mesaj": "Model şu an yanıt vermiyor. Biraz sonra yeniden dene."}
@@ -1128,13 +1148,14 @@ def pratik_ekle(sid: str, alan: str, beceri: str, bpm: int | None, dakika: int, 
 
 # ------------------------------------------------------- ajan çıktıları
 def ajan_ciktisi(sid: str, ajan: str) -> dict | None:
-    """Bir ajanın ürettiği son çıktı: kullanıcının anında görüp kopyalayabileceği/indirebileceği biçimde."""
+    """Bir ajanın ürettiği son çıktı, bölümler halinde."""
     s = store.get(sid)
     if not s:
         return None
     bolumler: list[dict] = []
     def b(baslik, satirlar):
-        satirlar = [str(x) for x in satirlar if x]
+        # Satır ya düz metindir ya da {"metin", "url"}: arayüz bağlantıyı ham adres yerine başlıkla gösterir.
+        satirlar = [x if isinstance(x, dict) else str(x) for x in satirlar if x]
         if satirlar:
             bolumler.append({"baslik": baslik, "satirlar": satirlar})
     hazir = {a: tr for a, tr in s["tracks"].items() if "roadmap" in tr}
@@ -1156,11 +1177,12 @@ def ajan_ciktisi(sid: str, ajan: str) -> dict | None:
         for a, tr in hazir.items():
             k = tr.get("kaynaklar") or {}
             if k.get("secim"):
-                b(f"{_ad(s, a)}: birincil kaynak", [f"{k['secim']['baslik']} ({k['secim']['puan']}/100)", k["secim"]["gerekce"], k["secim"]["url"]])
-                b(f"{_ad(s, a)}: alternatifler", [f"{x['baslik']} ({x['puan']}/100): {x['url']}" for x in k.get("alternatifler", [])])
-            for x in k.get("platformlar", []):
-                b(f"{_ad(s, a)}: güvenilir platform", [f"{x['ad']}: {x['neden']}", x["url"]])
-            b(f"{_ad(s, a)}: kavram bölümleri", [f"{y['baslik']}: {kb['baslik']} → {kb['url']}" for y in _ikiz_gorunum(s, tr)["yildizlar"]
+                if k.get("strateji"):
+                    b(f"{_ad(s, a)}: araştırma stratejisi", [k["strateji"]["ozet"]])
+                b(f"{_ad(s, a)}: birincil kaynak", [{"metin": k["secim"]["baslik"], "url": k["secim"]["url"]}, k["secim"]["gerekce"]])
+                b(f"{_ad(s, a)}: diğer kaynaklar", [{"metin": f"{x.get('rol', '')}: {x['baslik']}".lstrip(": "), "url": x["url"]} for x in k.get("alternatifler", [])])
+            b(f"{_ad(s, a)}: güvenilir platformlar", [{"metin": f"{x['ad']} ({x['dil']})", "url": x["url"]} for x in k.get("platformlar", [])])
+            b(f"{_ad(s, a)}: kavram bölümleri", [{"metin": f"{y['baslik']} → {kb['baslik']}", "url": kb["url"]} for y in _ikiz_gorunum(s, tr)["yildizlar"]
                                                 for kb in kaynak_avcisi.kavram_bolumu(y["baslik"])])
     elif ajan == "Gözcü":
         for a, tr in hazir.items():
@@ -1195,17 +1217,14 @@ def ajan_ciktisi(sid: str, ajan: str) -> dict | None:
             gb = son.get("geri_bildirim") or {}
             b(f"Son değerlendirme: {son.get('kavram', '')}", [gb.get("ozet", "")] + [f"{i + 1}. soru: {m['result']}" + (f" · ipucu: {m['hint']}" if m.get("hint") else "") for i, m in enumerate(son["items"])])
             b("Düzeltilecek cümleler", [f"{d['no']}. {d['cumle']}" for d in gb.get("duzelt_metin", [])])
-            b("Bakman gereken yer", [f"{y['baslik']}: {y['url']}" for y in gb.get("yonlendirme", [])])
+            b("Bakman gereken yer", [{"metin": y["baslik"], "url": y["url"]} for y in gb.get("yonlendirme", [])])
     elif ajan == "Gözlemevi":
         durum_tr = {"bekliyor": "bekliyor", "calisiyor": "çalışıyor", "bitti": "bitti", "hata": "hata"}
         b("Verilen görevler", [f"{j['metin']} → " + ", ".join(f"{a['ajan']} ({durum_tr.get(a['durum'], a['durum'])})" for a in j["atamalar"]) for j in s["gorevler"]])
     son_olaylar = [e for e in s["olaylar"] if e["ajan"] == ajan][-8:]
     b("Son adımları", [e["mesaj"] for e in son_olaylar])
-    md = [f"# {ajan} · çıktı", ""]
-    for x in bolumler:
-        md += [f"## {x['baslik']}", *[f"- {y}" for y in x["satirlar"]], ""]
-    bilgi = next((a for a in AJANLAR if a["ad"] == ajan), None)
-    return {"ajan": ajan, "rol": bilgi["rol"] if bilgi else "", "bolumler": bolumler, "markdown": "\n".join(md)}
+    bilgi = next((a for a in AJANLAR if a["ad"] == ajan), {})
+    return {"ajan": ajan, "rol": bilgi.get("rol", ""), "fayda": bilgi.get("fayda", ""), "ne_zaman": bilgi.get("ne_zaman", ""), "bolumler": bolumler}
 
 
 
@@ -1335,7 +1354,7 @@ def gorselden_cumleler(sid: str, alan: str, veri_b64: str, mime: str) -> dict:
         emit(s, "Astronom", "Yüklediğin görüntüyü okuyor (görüntü saklanmaz)…", "start", alan=alan)
     try:
         out = ia.gorsel_json(GORSEL_PROMPT.format(konu=konu), f"Konu: {konu}. Görüntüyü oku.", veri_b64, mime)
-    except ia.LLMError as e:
+    except ia.HATALAR as e:
         with store.lock(sid):
             emit(s, "Astronom", "Görüntü okunamadı.", "error", alan=alan)
         return {"ok": False, "mesaj": f"Görüntü okunamadı: {e}"}
@@ -1361,6 +1380,6 @@ def sesten_metin(sid: str, ses: bytes, mime: str) -> dict:
             return {"ok": False, "mesaj": "Bu saat için ses hakkın doldu."}
     try:
         metin = ia.ses_yaziya(ses, mime)
-    except ia.LLMError as e:
+    except ia.HATALAR as e:
         return {"ok": False, "mesaj": f"Ses yazıya çevrilemedi: {e}"}
     return {"ok": True, "metin": metin[:1500]}

@@ -222,9 +222,6 @@ def yol(alan: str, konu: str, dakika: int) -> dict:
     gun_dk = min(gun_dk, max(10, dakika))
     if banka is None:
         b = _genel_beceriler(konu)
-        sabit = [("learn", b[0], f"{konu}: temel kavramları öğren ve 3 not çıkar"),
-                 ("learn", b[0], f"{konu}: bir örneği baştan sona incele"),
-                 ("practice", b[1], f"{konu}: küçük bir alıştırma yap")]
         banka = []
         for d in range(1, 22):
             tip = "reflect" if d % 7 == 0 else "practice" if d % 2 == 0 else "learn"
