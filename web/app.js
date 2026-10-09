@@ -136,7 +136,8 @@ function modelRozeti() {
     S.yetenek = d.yetenekler || {};
     const r = $('#model-rozet'); if (!r) return;
     r.classList.toggle('canli', !d.demo);
-    r.replaceChildren(h('i'), d.demo ? 'Demo modu' : `Canlı model: ${d.model}`);
+    const m = d.modeller || {}, kisaAd = (x) => String(x || '').split('/').pop();
+    r.replaceChildren(h('i'), d.demo ? 'Demo modu' : m.hizli && m.hizli !== m.buyuk ? `Canlı: ${kisaAd(m.buyuk)} + ${kisaAd(m.hizli)}` : `Canlı: ${kisaAd(d.model)}`);
     r.title = d.demo ? 'Model anahtarı tanımlı değil: ajanlar hazır içerikle çalışır. Kurulum için README’ye bak.' : 'Ajanlar gerçek dil modeliyle çalışıyor.';
   }).catch(() => { const r = $('#model-rozet'); if (r) r.replaceChildren(h('i'), 'Sunucuya ulaşılamıyor'); });
 }
@@ -250,7 +251,8 @@ function ajanKartlari(ajanlar, onSec = null) {
     h('span', { class: 'ic' },
       h('span', { class: 'ajan-kart-bas' }, avatar(a.ad), h('span', {}, h('b', {}, a.ad), h('span', { class: 'ajan-rol' }, a.rol))),
       h('span', { class: 'ajan-fayda' }, a.fayda),
-      h('span', { class: 'ajan-alt' }, h('span', {}, a.ne_zaman), h('span', { class: 'ajan-tur' }, TUR_ADI[a.tur] || ''))))));
+      h('span', { class: 'ajan-alt' }, h('span', {}, a.ne_zaman), h('span', { class: 'ajan-tur' }, TUR_ADI[a.tur] || '')),
+      a.model ? h('span', { class: 'ajan-model' }, a.model) : null))));
 }
 
 /* ---------- 3 · ekibin neler yapabileceği ---------- */
@@ -1123,7 +1125,8 @@ function ayarPano() {
   const el = h('div', {});
   const guncelle = (v) => el.replaceChildren(
     baslikSatiri('Veriler ve güvenlik', 'Neyi sakladığımız, neyi korumaya çalıştığımız ve verini nasıl silebileceğin.'),
-    h('section', { class: 'ayar-grup' }, h('h3', {}, 'Model'), h('p', { class: 'sis' }, v.demo ? 'Demo modundasın: ajanlar hazır içerikle çalışır, karar mantığı gerçektir.' : `Canlı model: ${v.model}.`)),
+    h('section', { class: 'ayar-grup' }, h('h3', {}, 'Model'), h('p', { class: 'sis' }, v.demo ? 'Demo modundasın: ajanlar hazır içerikle çalışır, karar mantığı gerçektir. Gerçek modele bağlamak için README’deki .env adımlarını izle.'
+      : `Planlama ve değerlendirme (Haritacı, Kutup Yıldızı, Yörüngeci, Kaşif, Hakem): ${v.modeller?.buyuk || v.model}. Sık çağrılan kısa işler (Gözlemevi, Konu Bekçisi, Rehber, İkiz, Astronom, Kaynak Avcısı, sohbet): ${v.modeller?.hizli || v.model}.${v.modeller?.gorsel ? ` Fotoğraf: ${v.modeller.gorsel}.` : ''}${v.modeller?.ses ? ` Ses: ${v.modeller.ses}.` : ''}`)),
     h('section', { class: 'ayar-grup' }, h('h3', {}, 'İkizine öğret nasıl korunuyor?'), h('ul', {},
       h('li', {}, 'Kişisel veri (kimlik, telefon, e-posta, IBAN, kart) modele ulaşmadan engellenir. Gizli karakter ve benzer harfle saklama denemeleri de yakalanır.'),
       h('li', {}, 'Talimat gibi yazılmış cümleler (“önceki kuralları unut”) ayıklanır; yazdıkların modele güvenilmez veri olarak verilir.'),
