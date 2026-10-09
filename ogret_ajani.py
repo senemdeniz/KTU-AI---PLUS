@@ -145,6 +145,21 @@ _DEMO_EXAMS = {
                      ["index", "reset_index"]),
     ],
 }
+_DEMO_EXAMS["türev"] = [
+    ExamQuestion("q1", "Türev neyi ölçer?",
+                 "Bir fonksiyonun bir noktadaki anlık değişim hızını ölçer.", ["anlık", "değişim"]),
+    ExamQuestion("q2", "Türev pozitifse fonksiyona ne olur?",
+                 "Fonksiyon o aralıkta artandır.", ["pozitif", "art"]),
+    ExamQuestion("q3", "Türevin sıfır olduğu her nokta tepe ya da çukur müdür?",
+                 "Hayır. Türev işaret değiştirmiyorsa (örn. x³ için x = 0) tepe ya da çukur olmaz.",
+                 ["sıfır", "tepe", "çukur"]),
+]
+_DEMO_HINTS_Q = {
+    "Türev neyi ölçer?": "İkizin türevin neyi ifade ettiğini bilmiyor. Ona bir günlük hayat örneğiyle anlattın mı?",
+    "Türev pozitifse fonksiyona ne olur?": "Türevin işaretinin fonksiyonun yönüyle ilişkisini ikizine anlattın mı?",
+    "Türevin sıfır olduğu her nokta tepe ya da çukur müdür?":
+        "y = x³ fonksiyonunu x = 0'da düşün. Cümlene hangi şartı eklemelisin?",
+}
 _DEMO_HINTS = {
     "q1": "İkizin satırları neye göre seçeceğini bilmiyor. Seçimi yapan şeyin ne olduğunu anlattın mı?",
     "q2": "Ya iki şart birden gerekirse? İkizine şartları nasıl birleştireceğini anlattın mı?",
@@ -178,11 +193,15 @@ def _demo_verdicts(exam: list[ExamQuestion], answers: list[TwinAnswer]) -> list[
     out = []
     for q, a in zip(exam, answers):
         if not a.cited:
-            out.append(Verdict(q.id, "anlatilmadi", _DEMO_HINTS.get(q.id)))
+            out.append(Verdict(q.id, "anlatilmadi", _DEMO_HINTS_Q.get(q.question, _DEMO_HINTS.get(q.id))))
             continue
         covered = sum(1 for k in q.key_points if _norm(k) in _norm(a.answer))
         result = "dogru" if covered >= min(2, len(q.key_points)) else "eksik"
-        out.append(Verdict(q.id, result, None if result == "dogru" else _DEMO_HINTS.get(q.id)))
+        # Yanlış genelleme: "her ... tepe/çukur" der ama işaret değişimini anlatmaz
+        if "tepe" in _norm(q.question) and "her" in _norm(a.answer).split() and "işaret" not in _norm(a.answer):
+            result = "yanlis"
+        hint = None if result == "dogru" else _DEMO_HINTS_Q.get(q.question, _DEMO_HINTS.get(q.id))
+        out.append(Verdict(q.id, result, hint))
     return out
 
 # ---------------------------------------------------------------------------

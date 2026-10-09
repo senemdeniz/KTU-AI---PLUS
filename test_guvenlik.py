@@ -80,3 +80,10 @@ def test_ogret_entegrasyon():
     finally:
         ia.is_mock, ia.llm_json = orig_mock, orig_llm
     assert ans[0].cited == [] and ans[0].answer == "Bunu bana anlatmadın."
+
+
+def test_turev_demo_yanlis_genelleme():
+    import ogret_ajani as oa
+    r = oa.ikize_ogret("Türev", "t", "Türev, bir fonksiyonun bir noktadaki anlık değişim hızıdır. f(x) = x² için türev 2x olur. "
+                       "Türevin sıfır olduğu her noktada fonksiyon tepe ya da çukur yapar.", oturum="t1")
+    assert [v.result for v in r.verdicts] == ["dogru", "anlatilmadi", "yanlis"]
