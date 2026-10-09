@@ -255,6 +255,7 @@ class ProfilIstek(BaseModel):
     hedef_notu: str | None = Field(default=None, max_length=200)
     sure: int | None = Field(default=None, ge=7, le=90)
     son_tarihler: list[SonTarih] | None = Field(default=None, max_length=5)
+    avatar: int | None = Field(default=None, ge=0, le=3)
 
 
 @app.patch("/v2/sessions/{sid}/profile")
@@ -264,7 +265,7 @@ def profil(sid: str, r: ProfilIstek):
         d = gv.denetle(metin) if metin.strip() else None
         if d and not d.izin:
             raise HTTPException(422, d.mesaj or "Bu alan kabul edilmedi")
-    out = g.profil_guncelle(sid, {"ad": r.ad, "dakika": r.dakika, "zaman": r.zaman, "seviye": r.seviye, "not_": r.hedef_notu, "sure": r.sure,
+    out = g.profil_guncelle(sid, {"ad": r.ad, "dakika": r.dakika, "zaman": r.zaman, "seviye": r.seviye, "not_": r.hedef_notu, "sure": r.sure, "avatar": r.avatar,
                                   "son_tarihler": [d.model_dump() for d in r.son_tarihler] if r.son_tarihler is not None else None})
     if not out["ok"]:
         raise HTTPException(409, out["mesaj"])

@@ -32,6 +32,7 @@ Bir **ajan ekibi (Gözlemevi)** seni rotanla karşılaştırır, plan tutmuyorsa
 - **Canlı demo (kendi kendine oynar):** karşılama sayfasında "Canlı demoyu izle". Gerçek API çağrılarıyla Elif'in gökyüzünü kurar, 3 gün ilerletir, ikizine "bağlı liste"yi bilerek bir hatayla anlatır, Hakem'in hatayı işaretleyip VisuAlgo'ya yönlendirmesini gösterir, cümleyi düzeltir ve yıldızı halkalı yapar (~40 sn). İstediğin an "Durdur".
 - **Logo → Takımyıldızların:** İkiz logosuna tıklayınca açtığın tüm konular, rotaları ve ikizinin yıldızlarıyla tek sayfada.
 - **Çıkış ve devam anahtarı:** "Çıkış yap" bu cihazdan çıkarır; gökyüzün sunucuda kalır. Gösterilen 32 karakterlik devam anahtarıyla (şifre gibi sakla) karşılama sayfasından geri dönersin.
+- **Bağlama duyarlı kaynaklar:** önce Türkçe anlatan güvenilir kaynak (ör. Ankara Üniversitesi Açık Ders), sonra İngilizce kaynaklar; İngilizce platformlarda konu İngilizce karşılığıyla aranır ("İspanyolca" → "Spanish"). Karşılığı bilinmiyorsa İngilizce platformda Türkçe kelimeyle arama yapılmaz.
 - **Kaynak güvenilirliği:** her kaynakta yayıncı (ör. NUS, MIT, Python Software Foundation), güven düzeyi (yüksek/orta/düşük), elle doğrulama tarihi ve "Bağlantıları şimdi kontrol et" ile gerçek bağlantı durumu. Kendi kaynağını ekleyebilir, birincil yapabilirsin; Kaynak Avcısı alan adından yayıncıyı değerlendirir. Yalnızca https; iç ağ/yerel adresler (SSRF) ve güvensiz yönlendirmeler reddedilir.
 - **İkizine öğret, kavram başına:** her kavramın cümleleri ayrı tutulur. İkizin sayfasında her kavram için "İkizin bu kavramı senden nasıl öğrendi?" açılır: ona anlattığın cümleler ve sınavdaki her sorunun sonucu. Daha kötü bir deneme, halkalı bilgiyi silmez.
 
@@ -78,7 +79,19 @@ Mobil uygulama (Expo) aynı API'yi kullanır: `cd mobile && npm install && EXPO_
 
 Hiçbiri yoksa **demo modu** çalışır: içerik elle yazılmış (Türev ve Gitar için özel), akış ve karar mantığı gerçektir.
 
-Testler: `python -m pytest -q` (29 test). API sözleşmesi: [`docs/API.md`](docs/API.md). Jüri anlatımı: [`DEMO.md`](DEMO.md).
+Testler: `python -m pytest -q` (31 test). API sözleşmesi: [`docs/API.md`](docs/API.md). Jüri anlatımı: [`DEMO.md`](DEMO.md).
+
+## Görüntü ve ses (İkizine öğret)
+
+İkizine fotoğrafla (ders notu, şema, gitarda el pozisyonu) ve sesle anlatabilirsin. Görüntü ve ses **saklanmaz**; model yalnızca yazıya döker, sen düzeltip eklersin ve metin yine güvenlik + Konu Bekçisi denetiminden geçer. Fotoğraf tarayıcıda küçültülüp yeniden kodlanır (EXIF/konum silinir).
+
+| Sağlayıcı | Görüntü | Ses | Ortam değişkenleri |
+|---|---|---|---|
+| Groq (ücretsiz katman) | evet | evet (Whisper) | `LLM_API_KEY`, `LLM_BASE_URL=https://api.groq.com/openai/v1`, `LLM_MODEL=openai/gpt-oss-120b`, `LLM_VISION_MODEL=<Groq'un görüntü modeli>`; ses için `STT_MODEL` gerekmez (`whisper-large-v3-turbo`) |
+| Google Gemini | evet | tarayıcı ses tanıması | `LLM_API_KEY`, `LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/`, `LLM_MODEL=<gemini modeli>` |
+| Claude | evet | tarayıcı ses tanıması | `ANTHROPIC_API_KEY` |
+
+Model adları sık değişir: Groq'un güncel görüntü modeli için console.groq.com/docs/vision, Gemini için ai.google.dev/gemini-api/docs/openai sayfasına bak. `/health` çıktısındaki `yetenekler` alanı hangi özelliklerin açık olduğunu gösterir. Tarayıcı ses tanıması yoksa (ör. Firefox) ses, sunucudaki Whisper'a gider.
 
 ## Güvenlik önlemleri (özet)
 

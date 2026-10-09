@@ -134,3 +134,31 @@ export function egri(sen, ikiz, w = 760, h = 300) {
   el.append(svg('path', { d: nk(sen), stroke: '#f5d78e', 'stroke-width': 2.8, fill: 'none', 'stroke-linejoin': 'round' }));
   return el;
 }
+
+/** Takımyıldız avatarları: kullanıcının seçtiği biçim. Sen altın ve dolu; ikizin aynı biçimin aynadaki mavi hali. */
+export const AVATAR_BICIM = [
+  { ad: 'Avcı', p: [[50, 12], [36, 28], [64, 28], [42, 50], [58, 50], [50, 52], [34, 78], [66, 78], [30, 98], [70, 98]], k: [[0, 1], [0, 2], [1, 3], [2, 4], [3, 5], [4, 5], [3, 6], [4, 7], [6, 8], [7, 9]] },
+  { ad: 'Kuğu', p: [[50, 10], [50, 30], [50, 50], [50, 72], [50, 96], [20, 46], [34, 48], [66, 48], [80, 46]], k: [[0, 1], [1, 2], [2, 3], [3, 4], [5, 6], [6, 2], [2, 7], [7, 8]] },
+  { ad: 'Lir', p: [[50, 12], [40, 34], [60, 34], [36, 66], [64, 66], [32, 96], [68, 96], [50, 50]], k: [[0, 1], [0, 2], [1, 7], [2, 7], [1, 3], [2, 4], [3, 4], [3, 5], [4, 6]] },
+  { ad: 'Kartal', p: [[50, 16], [50, 40], [18, 30], [32, 38], [68, 38], [82, 30], [50, 66], [40, 94], [60, 94]], k: [[0, 1], [2, 3], [3, 1], [1, 4], [4, 5], [1, 6], [6, 7], [6, 8]] },
+];
+export function avatarCiz(bicim, { renk = '#f5d78e', yanik = 0, ayna = false, halka = false, boyut = 200, etiket = '' } = {}) {
+  const b = AVATAR_BICIM[bicim % AVATAR_BICIM.length];
+  const n = b.p.length, lit = Math.max(0, Math.min(n, Math.round(yanik * n)));
+  const P = b.p.map(([x, y]) => [ayna ? 100 - x : x, y]);
+  const el = svg('svg', { viewBox: '0 0 100 110', width: boyut, height: boyut * 1.1, role: 'img', 'aria-label': `${etiket}: ${b.ad} takımyıldızı, ${n} yıldızdan ${lit} tanesi yanıyor`, class: 'avatar-svg' });
+  const grad = `parla${Math.random().toString(36).slice(2, 7)}`;
+  el.append(svg('defs', {}, svg('radialGradient', { id: grad }, svg('stop', { offset: '0', 'stop-color': renk, 'stop-opacity': '.5' }), svg('stop', { offset: '1', 'stop-color': renk, 'stop-opacity': '0' }))));
+  el.append(svg('circle', { cx: 50, cy: 55, r: 46, fill: `url(#${grad})`, opacity: 0.15 + 0.5 * (lit / n) }));
+  b.k.forEach(([a, c]) => {
+    const yan = a < lit && c < lit;
+    el.append(svg('line', { x1: P[a][0], y1: P[a][1], x2: P[c][0], y2: P[c][1], stroke: yan ? renk : '#2e3b75', 'stroke-width': yan ? 1.4 : 0.9, 'stroke-dasharray': halka && yan ? '3 3' : 'none', 'stroke-linecap': 'round' }));
+  });
+  P.forEach(([x, y], i) => {
+    if (i < lit) {
+      el.append(svg('circle', { cx: x, cy: y, r: 7, fill: renk, opacity: 0.12, class: 'avatar-isilti', style: `animation-delay:${(i * 0.37) % 2}s` }));
+      el.append(halka ? svg('circle', { cx: x, cy: y, r: 3.2, fill: 'none', stroke: renk, 'stroke-width': 1.4 }) : svg('circle', { cx: x, cy: y, r: 3, fill: renk }));
+    } else el.append(svg('circle', { cx: x, cy: y, r: 1.8, fill: '#3a4888' }));
+  });
+  return el;
+}

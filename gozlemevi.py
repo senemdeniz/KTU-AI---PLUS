@@ -799,7 +799,8 @@ def gorunum(sid: str) -> dict | None:
         "son_olay_id": len(s["olaylar"]),
         "sohbet": s.get("sohbet", [])[-30:], "sohbet_ajanlari": SOHBET_AJANLARI,
         "profil": {"ad": s["name"], "dakika": s["daily_minutes"], "zaman": s["zaman"], "seviye": s.get("seviye", "baslangic"),
-                   "not": s.get("not", ""), "sure": s.get("sure", 21), "son_tarihler": s["son_tarihler"], "baslangic": s["baslangic"]},
+                   "not": s.get("not", ""), "sure": s.get("sure", 21), "son_tarihler": s["son_tarihler"], "baslangic": s["baslangic"],
+                   "avatar": s.get("avatar", 0)},
         "sure_secenekleri": list(SURE_SECENEKLERI),
     }
 
@@ -984,6 +985,9 @@ def profil_guncelle(sid: str, alanlar: dict) -> dict:
             if k_api in alanlar and alanlar[k_api] is not None and alanlar[k_api] != s.get(k_s):
                 s[k_s] = alanlar[k_api]
                 degisen.append(k_s)
+        if alanlar.get("avatar") is not None and alanlar["avatar"] != s.get("avatar", 0):
+            s["avatar"] = int(alanlar["avatar"])
+            degisen.append("avatar")
         if alanlar.get("dakika") and alanlar["dakika"] != s["daily_minutes"]:
             oran = alanlar["dakika"] / s["daily_minutes"]
             s["daily_minutes"] = alanlar["dakika"]
@@ -1153,7 +1157,8 @@ def ajan_ciktisi(sid: str, ajan: str) -> dict | None:
             b("Düzeltilecek cümleler", [f"{d['no']}. {d['cumle']}" for d in gb.get("duzelt_metin", [])])
             b("Bakman gereken yer", [f"{y['baslik']}: {y['url']}" for y in gb.get("yonlendirme", [])])
     elif ajan == "Gözlemevi":
-        b("Verilen görevler", [f"{j['metin']} → " + ", ".join(f"{a['ajan']} ({a['durum']})" for a in j["atamalar"]) for j in s["gorevler"]])
+        durum_tr = {"bekliyor": "bekliyor", "calisiyor": "çalışıyor", "bitti": "bitti", "hata": "hata"}
+        b("Verilen görevler", [f"{j['metin']} → " + ", ".join(f"{a['ajan']} ({durum_tr.get(a['durum'], a['durum'])})" for a in j["atamalar"]) for j in s["gorevler"]])
     son_olaylar = [e for e in s["olaylar"] if e["ajan"] == ajan][-8:]
     b("Son adımları", [e["mesaj"] for e in son_olaylar])
     md = [f"# {ajan} · çıktı", ""]
