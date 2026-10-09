@@ -1,15 +1,24 @@
 import os, tempfile
-os.environ.update(AJAN_SENKRON="1", AJAN_GECIKME="0", LLM_PROVIDER="mock", IKIZ_YAZMA_LIMIT="100000", IKIZ_GENEL_LIMIT="100000", IKIZ_AG_KAPALI="1")
+os.environ.update(AJAN_SENKRON="1", AJAN_GECIKME="0", LLM_PROVIDER="mock", IKIZ_YAZMA_LIMIT="100000", IKIZ_GENEL_LIMIT="100000", IKIZ_AG_KAPALI="1", IKIZ_GIRIS_LIMIT="100000")
 os.environ["IKIZ_DB"] = os.path.join(tempfile.mkdtemp(), "t.db")
 from fastapi.testclient import TestClient
 import store
 import server
 
-c = TestClient(server.app)
+c = TestClient(server.app, headers={"X-Ikiz": "1"})
+
+
+def ac(govde: dict):
+    """Yeni bir kullanıcı kaydeder (çerez istemcide kalır) ve onun gökyüzünü açar."""
+    import uuid
+    c.cookies.clear()
+    r = c.post("/v2/auth/register", json={"kullanici": "t" + uuid.uuid4().hex[:12], "sifre": "gizli-sifre-1"})
+    assert r.status_code == 200, r.text
+    return c.post("/v2/sessions", json=govde)
 
 
 def yeni():
-    r = c.post("/v2/sessions", json={"ad": "Elif", "akademik": "Kalkülüs I · Türev", "hobi": "Gitar", "dakika": 30,
+    r = ac({"ad": "Elif", "akademik": "Kalkülüs I · Türev", "hobi": "Gitar", "dakika": 30,
                                      "son_tarihler": [{"baslik": "Vize", "tarih": "2026-10-16"}]})
     assert r.status_code == 200
     return r.json()["session_id"]
@@ -77,8 +86,8 @@ def test_kalicilik_ve_silme():
 
 
 def test_dogrulama():
-    assert c.post("/v2/sessions", json={"ad": "x"}).status_code == 422
-    assert c.post("/v2/sessions", json={"akademik": "a", "dakika": 5}).status_code == 422
+    assert ac({"ad": "x"}).status_code == 422
+    assert ac({"akademik": "a", "dakika": 5}).status_code == 422
 
 
 def test_konu_bekcisi():
@@ -121,19 +130,19 @@ def test_gizleme_saldirilari():
 
 
 def test_yeni_alan_dogrulama():
-    r = c.post("/v2/sessions", json={"akademik": "Veri Yapıları", "seviye": "uzman"})
+    r = ac({"akademik": "Veri Yapıları", "seviye": "uzman"})
     assert r.status_code == 422
-    r = c.post("/v2/sessions", json={"akademik": "Veri Yapıları", "hedef_notu": "Numaram 0532 123 45 67"})
+    r = ac({"akademik": "Veri Yapıları", "hedef_notu": "Numaram 0532 123 45 67"})
     assert r.status_code == 422
 
 
 def test_kaynak_avcisi():
-    r = c.post("/v2/sessions", json={"akademik": "Veri Yapıları", "dakika": 30, "seviye": "baslangic"}).json()
+    r = ac({"akademik": "Veri Yapıları", "dakika": 30, "seviye": "baslangic"}).json()
     v = c.get(f"/v2/sessions/{r['session_id']}").json()
     k = v["alanlar"][0]["kaynaklar"]
     assert k["kaynak_turu"] == "dogrulanmis" and k["secim"]["url"].startswith("https://") and k["alternatifler"]
     assert any(e["ajan"] == "Kaynak Avcısı" for e in c.get(f"/v2/sessions/{r['session_id']}/events").json()["olaylar"])
-    r2 = c.post("/v2/sessions", json={"hobi": "Ebru sanatı"}).json()
+    r2 = ac({"hobi": "Ebru sanatı"}).json()
     k2 = c.get(f"/v2/sessions/{r2['session_id']}").json()["alanlar"][0]["kaynaklar"]
     assert k2["kaynak_turu"] == "platform" and k2["secim"] is None and k2["arama"] == []
     assert all("google.com" not in p["url"] for p in k2["platformlar"]) and k2["platformlar"][0]["url"].startswith("https://acikders.ankara.edu.tr/")
@@ -141,18 +150,18 @@ def test_kaynak_avcisi():
 
 
 def test_baglama_duyarli_kaynak():
-    sid = c.post("/v2/sessions", json={"hobi": "İspanyolca"}).json()["session_id"]
+    sid = ac({"hobi": "İspanyolca"}).json()["session_id"]
     k = c.get(f"/v2/sessions/{sid}").json()["alanlar"][0]["kaynaklar"]
     assert k["secim"]["dil"] == "Türkçe" and "Duolingo" in k["yaklasim"]
     assert all("İspanyolca" not in x["url"] for x in k["alternatifler"])
-    sid = c.post("/v2/sessions", json={"akademik": "Olasılık"}).json()["session_id"]
+    sid = ac({"akademik": "Olasılık"}).json()["session_id"]
     k = c.get(f"/v2/sessions/{sid}").json()["alanlar"][0]["kaynaklar"]
     ing = [p for p in k["platformlar"] if p["dil"] == "İngilizce"]
     assert ing and all(p["terim"] == "probability" and "probability" in p["url"] for p in ing)
 
 
 def test_ikiz_yalnizca_ogrettiklerini_bilir():
-    r = c.post("/v2/sessions", json={"akademik": "Veri Yapıları", "dakika": 30}).json()
+    r = ac({"akademik": "Veri Yapıları", "dakika": 30}).json()
     sid = r["session_id"]
     v = c.get(f"/v2/sessions/{sid}").json()
     a = v["alanlar"][0]
@@ -175,7 +184,7 @@ def test_ikiz_yalnizca_ogrettiklerini_bilir():
 
 
 def test_sure_secimi_ve_profil():
-    r = c.post("/v2/sessions", json={"akademik": "Veri Yapıları", "dakika": 30, "sure": 14}).json()
+    r = ac({"akademik": "Veri Yapıları", "dakika": 30, "sure": 14}).json()
     sid = r["session_id"]
     v = c.get(f"/v2/sessions/{sid}").json()
     a = v["alanlar"][0]
@@ -207,10 +216,10 @@ def test_yeni_takimyildiz_ve_pratik():
 
 
 def test_ajan_ciktisi_ve_hakem_yonlendirme():
-    r = c.post("/v2/sessions", json={"akademik": "Veri Yapıları"}).json(); sid = r["session_id"]
+    r = ac({"akademik": "Veri Yapıları"}).json(); sid = r["session_id"]
     for ajan in ["Kutup Yıldızı", "Haritacı", "Kaynak Avcısı", "Gözcü", "İkiz"]:
         o = c.get(f"/v2/sessions/{sid}/agents/{ajan}/output").json()
-        assert o["bolumler"] and o["markdown"].startswith(f"# {ajan}")
+        assert o["bolumler"] and o["fayda"] and o["ne_zaman"]
     assert c.get(f"/v2/sessions/{sid}/agents/Yok/output").status_code == 404
     c.post(f"/v2/sessions/{sid}/demo/skip", json={"gun": 4, "tutarlilik": 1.0})
     a = c.get(f"/v2/sessions/{sid}").json()["alanlar"][0]
@@ -226,7 +235,7 @@ def test_ajan_ciktisi_ve_hakem_yonlendirme():
 
 
 def test_kavram_basina_cumleler():
-    r = c.post("/v2/sessions", json={"akademik": "Veri Yapıları", "sure": 21}).json(); sid = r["session_id"]
+    r = ac({"akademik": "Veri Yapıları", "sure": 21}).json(); sid = r["session_id"]
     c.post(f"/v2/sessions/{sid}/demo/skip", json={"gun": 8, "tutarlilik": 1.0})
     a = c.get(f"/v2/sessions/{sid}").json()["alanlar"][0]
     acik = [y for y in a["ikiz"]["yildizlar"] if y["acik"]]
@@ -250,7 +259,7 @@ def test_kavram_basina_cumleler():
 
 
 def test_kendi_kaynak_ve_guvenlik():
-    sid = c.post("/v2/sessions", json={"akademik": "Veri Yapıları"}).json()["session_id"]
+    sid = ac({"akademik": "Veri Yapıları"}).json()["session_id"]
     for kotu in ["http://ornek.com", "https://127.0.0.1/admin", "https://localhost:8000/", "javascript:alert(1)", "https://a:b@ornek.com"]:
         assert c.post(f"/v2/sessions/{sid}/sources", json={"alan": "akademik", "baslik": "Deneme", "url": kotu}).status_code == 422, kotu
     assert c.post(f"/v2/sessions/{sid}/sources", json={"alan": "akademik", "baslik": "Numaram 0532 123 45 67"}).status_code == 422
@@ -270,7 +279,7 @@ def test_kendi_kaynak_ve_guvenlik():
 def test_gorsel_ve_ses_dogrulama(monkeypatch):
     import base64
     import ikiz_ajan as ia
-    sid = c.post("/v2/sessions", json={"akademik": "Veri Yapıları"}).json()["session_id"]
+    sid = ac({"akademik": "Veri Yapıları"}).json()["session_id"]
     jpeg = base64.b64encode(b"\xff\xd8\xff" + b"0" * 2000).decode()
     # demo modunda görüntü kapalı → anlaşılır hata
     r = c.post(f"/v2/sessions/{sid}/teach/image", json={"alan": "akademik", "mime": "image/jpeg", "veri": jpeg})
@@ -292,7 +301,7 @@ def test_gorsel_ve_ses_dogrulama(monkeypatch):
 
 
 def test_konuya_ozgu_kaynak_stratejisi():
-    sid = c.post("/v2/sessions", json={"hobi": "İspanyolca", "akademik": "Veri Yapıları"}).json()["session_id"]
+    sid = ac({"hobi": "İspanyolca", "akademik": "Veri Yapıları"}).json()["session_id"]
     al = {a["konu"]: a["kaynaklar"] for a in c.get(f"/v2/sessions/{sid}").json()["alanlar"]}
     isp, veri = al["İspanyolca"], next(v for k, v in al.items() if "Veri" in k)
     assert isp["strateji"]["sinif"] == "dil" and isp["secim"]["dil"].startswith("Türkçe") and isp["secim"]["rol"] == "1. Türkçe temel"
@@ -310,7 +319,7 @@ def test_konuya_ozgu_kaynak_stratejisi():
 
 
 def test_her_konunun_kendi_ikizi():
-    sid = c.post("/v2/sessions", json={"akademik": "Veri Yapıları", "hobi": "Gitar", "avatar": 2}).json()["session_id"]
+    sid = ac({"akademik": "Veri Yapıları", "hobi": "Gitar", "avatar": 2}).json()["session_id"]
     v = c.get(f"/v2/sessions/{sid}").json()
     assert v["profil"]["avatar"] == 2
     adlar = [a["ikiz_kimlik"]["ad"] for a in v["alanlar"]]
@@ -325,3 +334,69 @@ def test_her_konunun_kendi_ikizi():
     assert c.patch(f"/v2/sessions/{sid}/tracks/{v['alanlar'][1]['alan']}/twin", json={"ad": "Nova"}).status_code == 409
     # bir ikize öğretilen diğerine geçmez
     assert all(a["ikiz"]["ogretilen"] == 0 for a in v["alanlar"][1:])
+
+
+def test_hesap_kayit_giris_cikis():
+    import uuid
+    from fastapi.testclient import TestClient as TC
+    a, b = TC(server.app, headers={"X-Ikiz": "1"}), TC(server.app, headers={"X-Ikiz": "1"})
+    ad = "u" + uuid.uuid4().hex[:8]
+    assert a.post("/v2/auth/register", json={"kullanici": ad, "sifre": "kisa"}).status_code == 422
+    assert a.post("/v2/auth/register", json={"kullanici": "A B!", "sifre": "gizli-sifre-1"}).status_code == 422
+    r = a.post("/v2/auth/register", json={"kullanici": ad.upper(), "sifre": "gizli-sifre-1"})
+    assert r.status_code == 200 and r.json() == {"kullanici": ad, "session_id": None}
+    assert "httponly" in r.headers["set-cookie"].lower() and "samesite=lax" in r.headers["set-cookie"].lower()
+    assert a.post("/v2/auth/register", json={"kullanici": ad, "sifre": "gizli-sifre-2"}).status_code == 409
+    # giriş yapmadan kalıcı gökyüzü açılamaz; misafir (canlı demo) açılabilir
+    assert b.post("/v2/sessions", json={"akademik": "Veri Yapıları"}).status_code == 401
+    assert b.post("/v2/sessions", json={"akademik": "Veri Yapıları", "misafir": True}).status_code == 200
+    sid = a.post("/v2/sessions", json={"ad": "Ada", "akademik": "Veri Yapıları", "avatar": 1}).json()["session_id"]
+    assert a.post("/v2/sessions", json={"akademik": "Gitar"}).status_code == 409
+    assert a.get("/v2/auth/me").json() == {"kullanici": ad, "session_id": sid}
+    # başkası bu gökyüzüne erişemez, sid'i bilse bile
+    assert b.get(f"/v2/sessions/{sid}").status_code == 404
+    assert b.post(f"/v2/sessions/{sid}/day/close").status_code == 404
+    # çıkış → erişim yok; tekrar giriş → aynı gökyüzü
+    assert a.post("/v2/auth/logout").status_code == 200
+    assert a.get("/v2/auth/me").json()["kullanici"] is None and a.get(f"/v2/sessions/{sid}").status_code == 404
+    assert a.post("/v2/auth/login", json={"kullanici": ad, "sifre": "yanlis-sifre-1"}).status_code == 401
+    assert a.post("/v2/auth/login", json={"kullanici": "yok" + ad, "sifre": "gizli-sifre-1"}).status_code == 401
+    r = a.post("/v2/auth/login", json={"kullanici": ad, "sifre": "gizli-sifre-1"})
+    assert r.json()["session_id"] == sid and a.get(f"/v2/sessions/{sid}").json()["profil"]["kullanici"] == ad
+    # şifre düz metin saklanmaz
+    satir = store._db().execute("SELECT ozet FROM hesaplar WHERE kullanici=?", (ad,)).fetchone()
+    assert b"gizli-sifre-1" not in satir[0]
+    # başka siteden yazma isteği reddedilir
+    yabanci = TC(server.app)   # özel başlık yok: başka bir siteden gelen form ya da fetch gibi
+    yabanci.cookies.update(a.cookies)
+    assert yabanci.post("/v2/auth/logout").status_code == 403
+    assert a.post("/v2/auth/logout", headers={"Sec-Fetch-Site": "cross-site"}).status_code == 403
+    # hesabı sil → gökyüzü de gider
+    assert a.delete("/v2/auth/account").status_code == 200
+    assert store.get(sid) is None
+    assert a.post("/v2/auth/login", json={"kullanici": ad, "sifre": "gizli-sifre-1"}).status_code == 401
+
+
+def test_giris_deneme_siniri(monkeypatch):
+    from fastapi.testclient import TestClient as TC
+    monkeypatch.setattr(server, "GIRIS_LIMIT", 3)
+    server._GIRIS_DENEME.clear()
+    x = TC(server.app, headers={"X-Ikiz": "1"})
+    for _ in range(3):
+        assert x.post("/v2/auth/login", json={"kullanici": "kimseyok", "sifre": "yanlis-123"}).status_code == 401
+    assert x.post("/v2/auth/login", json={"kullanici": "kimseyok", "sifre": "yanlis-123"}).status_code == 429
+    server._GIRIS_DENEME.clear()
+
+
+def test_env_dosyasi(tmp_path, monkeypatch):
+    import ayar
+    f = tmp_path / ".env"
+    f.write_text('# yorum\nexport IKIZ_DENEME_A="tirnakli deger"\nIKIZ_DENEME_B=duz # not\nIKIZ_DENEME_C=\nPATH=ezilmemeli\n', encoding="utf-8")
+    for k in ("IKIZ_DENEME_A", "IKIZ_DENEME_B", "IKIZ_DENEME_C"):
+        monkeypatch.delenv(k, raising=False)
+    yol = os.environ["PATH"]
+    ayar.yukle(f)
+    assert os.environ["IKIZ_DENEME_A"] == "tirnakli deger" and os.environ["IKIZ_DENEME_B"] == "duz"
+    assert "IKIZ_DENEME_C" not in os.environ and os.environ["PATH"] == yol
+    for k in ("IKIZ_DENEME_A", "IKIZ_DENEME_B"):
+        monkeypatch.delenv(k)
