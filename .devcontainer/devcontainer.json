@@ -14,14 +14,20 @@
   },
   "secrets": {
     "LLM_API_KEY": {
-      "description": "Groq ya da Gemini API anahtarı. Boş bırakırsan ajanlar demo içerikle çalışır.",
+      "description": "Groq API anahtarı (console.groq.com/keys). Boş bırakırsan ajanlar demo içerikle çalışır.",
       "documentationUrl": "https://console.groq.com/keys"
     },
     "LLM_BASE_URL": {
-      "description": "Örn. https://api.groq.com/openai/v1"
+      "description": "https://api.groq.com/openai/v1"
     },
     "LLM_MODEL": {
-      "description": "Örn. openai/gpt-oss-120b"
+      "description": "Büyük model: openai/gpt-oss-120b"
+    },
+    "LLM_MODEL_HIZLI": {
+      "description": "Hızlı model: openai/gpt-oss-20b"
+    },
+    "LLM_VISION_MODEL": {
+      "description": "Görüntü modeli (isteğe bağlı): qwen/qwen3.8-27b"
     }
   }
 }

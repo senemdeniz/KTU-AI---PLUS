@@ -31,16 +31,21 @@ def main() -> None:
     if ia.is_mock():
         sys.exit("Model anahtarı bulunamadı; uygulama demo modunda çalışır.\n"
                  "→ cp .env.example .env  komutuyla dosyayı oluştur, LLM_API_KEY satırına anahtarını yaz ve tekrar çalıştır.")
-    print(f"Sağlayıcı: {ia.provider()}   Model: {ia.model_name()}")
-    t0 = time.time()
-    try:
-        out = ia.llm_json('Türkçe ve kısa yanıt ver. Sadece şu JSON\'u döndür: {"cevap": str}',
-                          {"soru": "Bağlı liste nedir? Tek cümleyle açıkla."}, max_tokens=300)
-    except ia.LLMError as e:
-        m = str(e)
-        ipucu = next((t for k, t in IPUCLARI if k.upper() in m.upper()), "Model cevabı beklenen biçimde değil; farklı bir model dene.")
-        sys.exit(f"HATA: {m}\n→ {ipucu}")
-    print(f"Metin: çalışıyor ({time.time() - t0:.1f} sn) → {out.get('cevap', out)}")
+    m = ia.modeller()
+    print(f"Sağlayıcı: {ia.provider()}")
+    denenecek = [("Büyük model (planlama, değerlendirme)", "Haritacı", m["buyuk"])]
+    if m["hizli"] != m["buyuk"]:
+        denenecek.append(("Hızlı model (Gözlemevi, Konu Bekçisi, sohbet…)", "Gözlemevi", m["hizli"]))
+    for etiket, ajan, model in denenecek:
+        t0 = time.time()
+        try:
+            out = ia.llm_json('Türkçe ve kısa yanıt ver. Sadece şu JSON\'u döndür: {"cevap": str}',
+                              {"soru": "Bağlı liste nedir? Tek cümleyle açıkla."}, max_tokens=300, ajan=ajan)
+        except ia.LLMError as e:
+            hata = str(e)
+            ipucu = next((t for k, t in IPUCLARI if k.upper() in hata.upper()), "Model cevabı beklenen biçimde değil; farklı bir model dene.")
+            sys.exit(f"{etiket} — {model}\nHATA: {hata}\n→ {ipucu}")
+        print(f"{etiket} — {model}: çalışıyor ({time.time() - t0:.1f} sn) → {out.get('cevap', out)}")
     y = ia.yetenekler()
     print(f"Fotoğraftan öğretme: {'açık (' + str(y['gorsel_model']) + ')' if y['gorsel'] else 'kapalı (LLM_VISION_MODEL tanımla)'}")
     print(f"Sunucuda ses tanıma: {'açık (' + str(y['ses_model']) + ')' if y['ses'] else 'kapalı (tarayıcının ses tanıması kullanılır)'}")
