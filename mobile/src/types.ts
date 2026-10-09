@@ -7,7 +7,7 @@ export interface Gorev {
 }
 export interface Olay {
   id: number; t: number; ajan: string; mesaj: string;
-  tur: 'start' | 'info' | 'decision' | 'handoff' | 'done' | 'guard' | 'error'; veri: any; alan: Alan | null;
+  tur: 'chat' | 'start' | 'info' | 'decision' | 'handoff' | 'done' | 'guard' | 'error'; veri: any; alan: Alan | null;
 }
 export interface Ikiz {
   gun: number; sen_yildiz: number; ikiz_yildiz: number; toplam_yildiz: number; fark: number;
@@ -42,5 +42,6 @@ export interface View {
   oneriler: Oneri[]; gorevler: GorevIsi[];
   ogret: { alan: Alan; konu: string; cumleler: string[]; son: OgretSon | null };
   ajanlar: AjanBilgi[]; son_olay_id: number;
+  sohbet: { rol: 'kullanici' | 'ajan'; ajan: string | null; metin: string }[]; sohbet_ajanlari: string[];
 }
 export interface Engel { ok: false; engel: string; mesaj: string; uyarilar?: { kod: string; mesaj: string }[] }

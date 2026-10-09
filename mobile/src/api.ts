@@ -44,6 +44,7 @@ export const api = {
   gorevVer: (sid: string, metin: string) => istek<any>(`/v2/sessions/${sid}/assign`, 'POST', { metin }),
   onayla: (sid: string, pid: string) => istek<View>(`/v2/sessions/${sid}/proposals/${pid}/approve`, 'POST'),
   reddet: (sid: string, pid: string) => istek<View>(`/v2/sessions/${sid}/proposals/${pid}/reject`, 'POST'),
+  sohbet: (sid: string, metin: string, ajan: string | null) => istek<any>(`/v2/sessions/${sid}/chat`, 'POST', { metin, ajan }),
   ogretEkle: (sid: string, metin: string, alan: Alan) => istek<any>(`/v2/sessions/${sid}/teach/add`, 'POST', { metin, alan }),
   ogretSil: (sid: string) => istek<{ ok: boolean }>(`/v2/sessions/${sid}/teach`, 'DELETE'),
   sinav: (sid: string) => istek<any>(`/v2/sessions/${sid}/teach/exam`, 'POST'),

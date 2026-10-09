@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, TextInput, View } from 'react-native';
 import { api } from '../api';
 import { useOturum } from '../oturum';
 import { Btn, Chip, Hata } from '../ui';
@@ -10,7 +10,10 @@ const TUR: Record<string, string> = { decision: 'KARAR', handoff: 'DEVİR', done
 
 export function Ekip({ gorevVer }: { gorevVer: () => void }) {
   const { view, olaylar, sid, calistir, mesgul, hata } = useOturum();
-  const [sek, setSek] = useState<'akis' | 'uye'>('akis');
+  const [sek, setSek] = useState<'akis' | 'uye' | 'sohbet'>('akis');
+  const [metin, setMetin] = useState('');
+  const [ajan, setAjan] = useState<string | null>(null);
+  const [uyari, setUyari] = useState<string | null>(null);
   if (!view || !sid) return null;
   const son = olaylar[olaylar.length - 1];
   const calisiyor = view.durum !== 'hazir';
@@ -32,7 +35,7 @@ export function Ekip({ gorevVer }: { gorevVer: () => void }) {
         </View>
         <Text style={[s.small, { textAlign: 'center' }]}>{calisiyor ? `${aktif ?? 'Ekip'} çalışıyor…` : 'Ekip hazır, seni bekliyor'}</Text>
       </View>
-      <View style={s.row}><Chip label="Akış" on={sek === 'akis'} onPress={() => setSek('akis')} /><Chip label="Ekip üyeleri" on={sek === 'uye'} onPress={() => setSek('uye')} /></View>
+      <View style={s.row}><Chip label="Akış" on={sek === 'akis'} onPress={() => setSek('akis')} /><Chip label="Ekip üyeleri" on={sek === 'uye'} onPress={() => setSek('uye')} /><Chip label="Sohbet" on={sek === 'sohbet'} onPress={() => setSek('sohbet')} /></View>
       <Hata metin={hata} />
       {sek === 'akis' && (<>
         {view.oneriler.map((p) => (
@@ -78,6 +81,35 @@ export function Ekip({ gorevVer }: { gorevVer: () => void }) {
               </Balon>);
           })}
         </View>
+      </>)}
+      {sek === 'sohbet' && (<>
+        <Text style={s.muted}>Bir ajan seç ve doğrudan yaz. Seçmezsen Gözlemevi soruyu en uygun ajana yönlendirir.</Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+          <Chip label="Otomatik" on={ajan === null} onPress={() => setAjan(null)} />
+          {view.sohbet_ajanlari.map((a) => <Chip key={a} label={a} on={ajan === a} onPress={() => setAjan(a)} />)}
+        </View>
+        <View style={{ gap: 12 }}>
+          {view.sohbet.length === 0 && <Text style={s.small}>Örnek: "Planım nasıl gidiyor?", "Bugün motivasyonum yok", "Neden bu hedefi seçtin?"</Text>}
+          {view.sohbet.map((m, i) => m.rol === 'kullanici' ? (
+            <View key={i} style={{ alignSelf: 'flex-end', maxWidth: '82%', backgroundColor: C.gold, borderRadius: 16, borderBottomRightRadius: 4, padding: 12 }}>
+              <Text style={{ color: C.bg, fontSize: 14, lineHeight: 20 }}>{m.metin}</Text></View>
+          ) : (
+            <View key={i} style={{ flexDirection: 'row', gap: 10 }}>
+              <Avatar ad={m.ajan ?? 'Gözlemevi'} boyut={34} />
+              <View style={{ flex: 1, backgroundColor: C.card2, borderRadius: 16, borderTopLeftRadius: 4, padding: 12, gap: 3, borderLeftWidth: 3, borderLeftColor: ajanBilgi(m.ajan ?? '').renk }}>
+                <Text style={{ color: ajanBilgi(m.ajan ?? '').renk, fontSize: 12, fontWeight: '800' }}>{m.ajan}</Text>
+                <Text style={s.body}>{m.metin}</Text></View>
+            </View>))}
+          {mesgul && <Yaziyor ad={ajan ?? 'Gözlemevi'} />}
+        </View>
+        {!!uyari && <Hata metin={uyari} />}
+        <TextInput style={[s.input, { minHeight: 60 }]} multiline value={metin} onChangeText={setMetin} maxLength={600}
+          placeholder={`${ajan ?? 'Ekibe'} bir şey sor…`} placeholderTextColor={C.faint} />
+        <Btn disabled={mesgul || !metin.trim()} onPress={async () => {
+          const m = metin; setUyari(null);
+          const r = await calistir(() => api.sohbet(sid, m, ajan));
+          if (r?.ok) setMetin(''); else if (r) setUyari(r.mesaj);
+        }}>Gönder</Btn>
       </>)}
       {sek === 'uye' && view.ajanlar.map((a) => (
         <View key={a.ad} style={[s.card2, { flexDirection: 'row', gap: 12 }]}>

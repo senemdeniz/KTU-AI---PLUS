@@ -25,6 +25,7 @@
 - **Tek konuyla hızlı başlangıç:** konuyu yaz, ekip 21 günlük yol haritasını çıkarır (Gökyüzü → Yol haritan).
 - **Ajan sahnesi:** Ekip sekmesinde avatarlar, konuşan ajan parlaması, "yazıyor…" göstergesi, balonlu akış, devir/karar/koruma etiketleri.
 - **İlerlemeyi sen belirlersin:** Bugün sekmesinde görevleri işaretle ve "Günü bitir"; ya da İkizin → *Canlı demo kontrolü* ile "N gün geçti, planın %X'ini yaptım".
+- **Ajanlarla sohbet:** Ekip → Sohbet: bir ajan seç (Rehber, Yörüngeci, Gözcü…) ya da "Otomatik" bırak; ajan oturumunun gerçek verilerine (ilerleme, yıldızlar, hedef) dayanarak yanıtlar.
 - **Sesli anlatım:** İkizine öğret ekranında 🎙️ (web: Chrome/Safari, tr-TR). Konuşma metne çevrilir, düzenlenir, sonra yazılı metinle aynı güvenlik + Konu Bekçisi denetiminden geçer.
 
 ## Güvenlik ve etik (`guvenlik.py`)
@@ -32,6 +33,8 @@
 Kişisel veri (TC kimlik, telefon, e-posta, IBAN, kart) engellenir; prompt injection ve zararlı içerik denetlenir; kullanıcı metni modele "güvenilmez veri" olarak verilir; ödev yaptırma reddedilir (ekip anlamana yardım eder, ödevi yapmaz); boyut ve hız sınırı vardır; İkiz'in yapay zekâ olduğu belirtilir; "Verilerimi sil" tüm oturumu siler. Bu kural tabanlı **ilk savunma hattıdır**; üretimde bir moderasyon modeliyle desteklenmelidir.
 
 ## Çalıştırma
+
+Gerçek model bağlantısını önce tek komutla dene: `python3 llm_kontrol.py` (hata olursa nedenini söyler).
 
 ```bash
 pip install -r requirements.txt
@@ -54,7 +57,7 @@ EXPO_PUBLIC_API_URL=http://localhost:8000 npx expo start --web   # ya da telefon
 
 Hiçbiri yoksa **demo modu** çalışır: içerik elle yazılmış (Türev ve Gitar için özel), akış ve karar mantığı gerçektir.
 
-Testler: `python -m pytest -q` (18 test). API sözleşmesi: [`docs/API.md`](docs/API.md). Jüri anlatımı: [`DEMO.md`](DEMO.md).
+Testler: `python -m pytest -q` (19 test). API sözleşmesi: [`docs/API.md`](docs/API.md). Jüri anlatımı: [`DEMO.md`](DEMO.md).
 
 ## Bilinen sınırlar
 
