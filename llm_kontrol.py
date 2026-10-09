@@ -16,11 +16,15 @@ try:
     out = ia.llm_json(SISTEM, {"soru": "Türev nedir? Tek cümleyle açıkla ve bir örnek ver."}, max_tokens=300)
 except ia.LLMError as e:
     m = str(e)
-    ipucu = ("Kredi/ödeme gerekiyor olabilir (Hugging Face ücretsiz hesapta kredi yok: PRO ya da ödeme yöntemi ekle)." if "402" in m else
-             "Token geçersiz ya da 'Inference Providers' izni yok." if ("401" in m or "403" in m) else
-             "Model adı yanlış olabilir; LLM_MODEL değerini değiştir." if "404" in m else
-             "Ağ ya da zaman aşımı; bağlantını kontrol et." if ("timed out" in m or "urlopen" in m) else
-             "JSON ayrıştırılamadı; model başka metin ekliyor olabilir. Çıktıyı bana gönder.")
+    ipucu = ("Hesapta kredi yok ya da ödeme gerekiyor (Hugging Face ücretsiz hesapta aylık kredi yok: PRO ya da ödeme yöntemi ekle)." if "HTTP 402" in m else
+             "Token geçersiz ya da iptal edilmiş. Yeni token oluşturup tekrar export et." if "HTTP 401" in m else
+             "Token'da 'Make calls to Inference Providers' izni yok. Token ayarlarından bu izni aç ya da yeni token oluştur." if "HTTP 403" in m else
+             "Model bulunamadı ya da bu sağlayıcıda yok. LLM_MODEL değerini değiştir (örn. openai/gpt-oss-120b:cheapest)." if ("HTTP 404" in m or "HTTP 400" in m) else
+             "Çok fazla istek; biraz bekleyip tekrar dene." if "HTTP 429" in m else
+             "Sağlayıcı tarafında geçici hata; biraz sonra tekrar dene." if "HTTP 5" in m else
+             "SSL sertifika sorunu: macOS'ta 'pip3 install certifi' sonra tekrar dene; olmazsa çıktıyı gönder." if "CERTIFICATE" in m.upper() else
+             "İnternet bağlantını kontrol et." if "bağlantı hatası" in m else
+             "Model cevabı JSON değil; çıktıyı bana gönder.")
     sys.exit(f"HATA: {m}\n→ {ipucu}")
 print(f"Başarılı ({time.time() - t0:.1f} sn). Model yanıtı:")
 print(out)

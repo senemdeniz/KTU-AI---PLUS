@@ -390,12 +390,24 @@ def _openai_compat(system: str, payload: dict, max_tokens: int) -> str:
                      {"role": "user", "content": json.dumps(payload, ensure_ascii=False)}],
     }).encode()
     req = urllib.request.Request(base + "/chat/completions", data=body, method="POST",
-                                 headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}"})
+                                 headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}",
+                                          "User-Agent": "ikiz/2.0 (+python-urllib)", "Accept": "application/json"})
+    import urllib.error
     try:
         with urllib.request.urlopen(req, timeout=float(os.environ.get("LLM_TIMEOUT", "90"))) as r:
             data = json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        try:
+            ayrinti = e.read().decode("utf-8", "replace")[:300]
+        except Exception:  # noqa: BLE001
+            ayrinti = ""
+        if key:
+            ayrinti = ayrinti.replace(key, "***")
+        raise LLMError(f"HTTP {e.code}: {ayrinti}") from e
+    except urllib.error.URLError as e:
+        raise LLMError(f"bağlantı hatası: {e.reason}") from e
     except Exception as e:  # noqa: BLE001
-        raise LLMError(f"model uç noktasına ulaşılamadı: {type(e).__name__}") from e
+        raise LLMError(f"model uç noktasına ulaşılamadı: {type(e).__name__}: {e}") from e
     try:
         return data["choices"][0]["message"]["content"] or ""
     except (KeyError, IndexError, TypeError) as e:
