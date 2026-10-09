@@ -79,3 +79,14 @@ def test_kalicilik_ve_silme():
 def test_dogrulama():
     assert c.post("/v2/sessions", json={"ad": "x"}).status_code == 422
     assert c.post("/v2/sessions", json={"akademik": "a", "dakika": 5}).status_code == 422
+
+
+def test_konu_bekcisi():
+    sid = yeni()
+    r = c.post(f"/v2/sessions/{sid}/teach/add", json={"metin": "Dün akşam ne yaptım biliyor musun, çok güzel bir film izledim."}).json()
+    assert not r["ok"] and r["engel"] == "konu_disi"
+    assert c.get(f"/v2/sessions/{sid}").json()["ogret"]["cumleler"] == []
+    r = c.post(f"/v2/sessions/{sid}/teach/add", json={"metin": "Türev, fonksiyonun bir noktadaki eğimidir."}).json()
+    assert r["ok"]
+    ev = c.get(f"/v2/sessions/{sid}/events").json()["olaylar"]
+    assert any(e["ajan"] == "Konu Bekçisi" and e["tur"] == "guard" for e in ev)

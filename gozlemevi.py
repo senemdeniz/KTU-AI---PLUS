@@ -27,6 +27,7 @@ from dataclasses import asdict
 
 import guvenlik as gv
 import icerik
+import konu_bekcisi
 import ikiz_ajan as ia
 import ogret_ajani as oa
 import store
@@ -41,6 +42,8 @@ AJANLAR = [
     {"ad": "Yörüngeci", "rol": "Plan gerisinde kalınca en hafif müdahaleyi seçer", "tur": "llm",
      "yetki": "Küçük değişikliği uygular, büyüğü onaya sunar"},
     {"ad": "Rehber", "rol": "Suçlamadan, tek net adım önerir", "tur": "llm", "yetki": "Mini görev ekleyebilir"},
+    {"ad": "Konu Bekçisi", "rol": "Anlattığının seçtiğin konuyla bağını denetler", "tur": "llm+kod",
+     "yetki": "Konu dışı anlatımı ikize ulaştırmaz"},
     {"ad": "Kaşif", "rol": "Sınav sorusu hazırlar", "tur": "llm", "yetki": "Referans cevabı kullanıcıdan saklar"},
     {"ad": "İkiz", "rol": "Yalnızca senin anlattıklarını bilir", "tur": "llm", "yetki": "Başka bilgi kullanamaz"},
     {"ad": "Hakem", "rol": "İkiz'in cevaplarını denetler", "tur": "llm+kod", "yetki": "Cevabı söylemez, ipucu verir"},
@@ -495,6 +498,14 @@ def ogret_ekle(sid: str, metin: str, alan: str) -> dict:
         if not d.izin:
             emit(s, "Gözlemevi", f"Anlatım ikize gönderilmedi ({d.engel}).", "guard")
             return {"ok": False, "engel": d.engel, "mesaj": d.mesaj, "uyarilar": d.uyarilar}
+        konu = ogret_konu(s, alan)
+        emit(s, "Konu Bekçisi", f"Anlatımı “{konu}” konusuyla karşılaştırıyor…", "start", alan=alan)
+        _gecikme()
+        kb = konu_bekcisi.denetle(konu, "\n".join(d.cumleler))
+        if not kb["ilgili"]:
+            emit(s, "Konu Bekçisi", f"Konu dışı: ikize iletilmedi. {kb['neden']}", "guard", alan=alan)
+            return {"ok": False, "engel": "konu_disi", "mesaj": kb["neden"], "uyarilar": []}
+        emit(s, "Konu Bekçisi", "Anlatım konuyla ilgili; ikize iletilebilir.", "done", alan=alan)
         yeni = [c for c in d.cumleler if c not in mevcut]
         birlesik = mevcut + yeni
         if len("\n".join(birlesik)) > gv.MAX_KARAKTER or len(birlesik) > gv.MAX_CUMLE:
@@ -576,6 +587,8 @@ def gorunum(sid: str) -> dict | None:
                      "seri": tr["twin"]["streak"], "risk": tr["twin"]["risk"], "risk_tr": RISK_TR[tr["twin"]["risk"]],
                      "parlaklik": _parlaklik(tr), "egri": _egri(tr)},
             "haftalar": tr["roadmap"]["weeks"],
+            "harita": [{"id": x["id"], "day": x["day"], "title": x["title"], "type": x["type"], "minutes": x["minutes"],
+                        "done": bool(x["done"] or x["id"] in s["bitenler"])} for x in tr["roadmap"]["tasks"]],
         })
     bugun = bugun_gorevleri(s) if s["durum"] != "kuruluyor" and all("roadmap" in t for t in s["tracks"].values()) else []
     ilk = next(iter(s["tracks"].values()))
