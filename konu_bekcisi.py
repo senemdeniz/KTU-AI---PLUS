@@ -27,6 +27,8 @@ _BANKA = {
               "tepe", "cukur", "kural", "diferansiyel", "integral", "hiz", "nokta", "grafik", "konkav", "maksimum", "minimum"],
     "veri": ["veri", "yapi", "dizi", "liste", "yigin", "kuyruk", "stack", "queue", "hash", "agac", "graf", "dugum", "isaretci",
              "big", "karmasik", "erisim", "arama", "ekleme", "silme", "eleman", "indeks", "bfs", "dfs", "heap", "sirala", "algoritma", "cakisma"],
+    "ispanyolca": ["ispanyol", "espanol", "fiil", "artikel", "ser", "estar", "cekim", "zaman", "kelime", "cumle", "telaffuz", "eril", "disil",
+                   "tener", "hablar", "gustar", "soru", "sifat", "isim", "cogul", "hola", "yo", "tu", "usted", "el", "la", "los", "las"],
     "gitar": ["gitar", "akor", "tel", "perde", "ritim", "tempo", "metronom", "tirmal", "nota", "ses", "parmak", "sarki",
               "gecis", "melodi", "capo", "bilek", "tuning", "akort"],
 }
@@ -41,7 +43,7 @@ def _kokler(metin: str) -> set[str]:
 def _demo(konu: str, metin: str) -> dict:
     n = gv._norm(konu)
     tip = ("turev" if ("turev" in n or "kalkulus" in n) else "gitar" if "gitar" in n
-           else "veri" if ("veri yap" in n or "data struct" in n) else None)
+           else "veri" if ("veri yap" in n or "data struct" in n) else "ispanyolca" if ("ispanyolca" in n or "spanish" in n) else None)
     aranan = {k[:5] for k in (_BANKA.get(tip, []))} | _kokler(konu)
     ortak = aranan & _kokler(metin)
     if len(ortak) >= 1 and len(metin.split()) >= 4:

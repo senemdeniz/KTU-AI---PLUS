@@ -22,6 +22,8 @@ def _tip(konu: str) -> str:
         return "gitar"
     if "veri yap" in n or "data struct" in n or "veri-yap" in n:
         return "veri"
+    if "ispanyolca" in n or "spanish" in n:
+        return "ispanyolca"
     return "genel"
 
 
@@ -29,11 +31,13 @@ def _tip(konu: str) -> str:
 _BASLANGIC = {
     "turev": {"limit ve süreklilik": 1.0, "türev kuralları": 0.8, "uygulamalar": 0.5},
     "gitar": {"akorlar": 0.5, "ritim": 0.5, "geçişler": 0.3},
+    "ispanyolca": {"telaffuz ve kelime": 0.5, "dil bilgisi": 0.4, "konuşma ve dinleme": 0.3},
     "veri": {"karmaşıklık": 0.6, "doğrusal yapılar": 0.6, "ağaçlar ve graflar": 0.3},
 }
 _HEDEF_SEVIYE = {
     "turev": {"limit ve süreklilik": 2.0, "türev kuralları": 3.0, "uygulamalar": 2.5},
     "gitar": {"akorlar": 2.5, "ritim": 2.0, "geçişler": 2.5},
+    "ispanyolca": {"telaffuz ve kelime": 2.5, "dil bilgisi": 2.5, "konuşma ve dinleme": 2.0},
     "veri": {"karmaşıklık": 2.5, "doğrusal yapılar": 3.0, "ağaçlar ve graflar": 2.5},
 }
 
@@ -75,6 +79,16 @@ def hedef(alan: str, konu: str, dakika: int, sure: int = 21) -> dict:
             "rationale": f"Günde {dakika} dakikayla en hızlı tatmin eden hedef bu: {sure} gün sonunda çalıp paylaşabileceğin bir şarkın olur.",
             "target_skills": _HEDEF_SEVIYE["gitar"], "duration_days": sure,
             "success_metric": "Seçtiğin şarkıyı 3 dakika boyunca duraksamadan çalmak"}
+    if t == "ispanyolca":
+        return {"candidates": [
+            {"title": "A1 düzeyinde kendini tanıtıp günlük basit konuşmaları yapabilmek", "fit_score": 88,
+             "reason": "Ölçülebilir, motive edici ve sonraki her şeyin temeli."},
+            {"title": "Dil bilgisini sistemli bitirmek", "fit_score": 62, "reason": "Konuşma olmadan ezber kalır."},
+            {"title": "DELE A2 sınavına hazırlanmak", "fit_score": 45, "reason": "Bu süre için fazla iddialı."}],
+            "selected": "A1 düzeyinde kendini tanıtıp günlük basit konuşmaları yapabilmek",
+            "rationale": f"Günde {dakika} dakikayla {sure} günde en gerçekçi hedef: telaffuz, temel kelimeler, ser/estar ve geniş zaman. Her kuralı Türkçe karşılaştırmayla öğrenirsin.",
+            "target_skills": _HEDEF_SEVIYE["ispanyolca"], "duration_days": sure,
+            "success_metric": "2 dakika boyunca kendini İspanyolca tanıtıp 5 basit soruyu cevaplayabilmek"}
     if t == "veri":
         return {"candidates": [
             {"title": "Temel veri yapılarını seçip gerekçesiyle kullanabilmek (dizi, bağlı liste, yığın, kuyruk, hash, ağaç)", "fit_score": 90,
@@ -174,10 +188,36 @@ _VERI = [
 _VERI_ANLAT = {4: "bağlı liste", 8: "yığın ve kuyruk", 12: "hash tablosu", 16: "ikili arama ağacı", 20: "BFS ve DFS"}
 
 
+_ISP = [
+    ("learn", "telaffuz ve kelime", "Alfabe ve telaffuz: ñ, ll, rr, j seslerini Türkçedeki karşılıklarıyla çalış"),
+    ("learn", "telaffuz ve kelime", "Selamlaşma ve kendini tanıtma: Hola, me llamo…, soy de Turquía"),
+    ("practice", "konuşma ve dinleme", "Kendini 5 cümleyle tanıt, kaydet ve dinle"),
+    ("learn", "dil bilgisi", "Cinsiyet ve artikeller: el / la / los / las"),
+    ("practice", "telaffuz ve kelime", "Sayılar 1–100 ve yaş söyleme: tengo … años"),
+    ("learn", "dil bilgisi", "Ser ve estar: ikisi de 'olmak', farkı ne?"),
+    ("reflect", "dil bilgisi", "1. hafta: ser/estar'ı Türkçe bir örnekle kendine açıkla"),
+    ("practice", "dil bilgisi", "Ser mi estar mı? 10 cümlede seç"),
+    ("learn", "dil bilgisi", "Geniş zaman: -ar fiilleri (hablar)"),
+    ("learn", "dil bilgisi", "Geniş zaman: -er ve -ir fiilleri (comer, vivir)"),
+    ("practice", "konuşma ve dinleme", "Günlük rutinini 6 cümleyle anlat"),
+    ("learn", "telaffuz ve kelime", "Soru kelimeleri: qué, dónde, cuándo, cómo, por qué"),
+    ("practice", "konuşma ve dinleme", "Bir arkadaşına 5 soru sor, cevaplarını yaz"),
+    ("reflect", "konuşma ve dinleme", "2. hafta: en çok hangi seste zorlandın? Kaydını dinle"),
+    ("learn", "dil bilgisi", "Düzensiz fiiller: tener, ir, hacer"),
+    ("practice", "telaffuz ve kelime", "Yemek ve alışveriş kelimeleri: kafede sipariş ver"),
+    ("learn", "dil bilgisi", "Gustar yapısı: me gusta / me gustan"),
+    ("practice", "konuşma ve dinleme", "Kısa bir dinleme: yavaş İspanyolca bir video, 3 not"),
+    ("practice", "konuşma ve dinleme", "Bir gününü anlatan 8 cümlelik paragraf"),
+    ("practice", "konuşma ve dinleme", "2 dakika kendini tanıt, kaydet"),
+    ("reflect", "konuşma ve dinleme", "Final: kaydını ilk günkü kaydınla karşılaştır"),
+]
+_ISP_ANLAT = {4: "cinsiyet ve artikeller", 8: "ser ve estar", 12: "geniş zaman çekimi", 16: "düzensiz fiiller", 20: "gustar yapısı"}
+
+
 def yol(alan: str, konu: str, dakika: int) -> dict:
     t = _tip(konu)
     banka, anlat = ((_TUREV, _TUREV_ANLAT) if t == "turev" else (_GITAR, _GITAR_ANLAT) if t == "gitar"
-                    else (_VERI, _VERI_ANLAT) if t == "veri" else (None, None))
+                    else (_VERI, _VERI_ANLAT) if t == "veri" else (_ISP, _ISP_ANLAT) if t == "ispanyolca" else (None, None))
     gun_dk = 25 if alan == "akademik" else 15
     gun_dk = min(gun_dk, max(10, dakika))
     if banka is None:

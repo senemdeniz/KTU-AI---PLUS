@@ -133,10 +133,22 @@ def test_kaynak_avcisi():
     k = v["alanlar"][0]["kaynaklar"]
     assert k["kaynak_turu"] == "dogrulanmis" and k["secim"]["url"].startswith("https://") and k["alternatifler"]
     assert any(e["ajan"] == "Kaynak Avcısı" for e in c.get(f"/v2/sessions/{r['session_id']}/events").json()["olaylar"])
-    r2 = c.post("/v2/sessions", json={"hobi": "İspanyolca"}).json()
+    r2 = c.post("/v2/sessions", json={"hobi": "Ebru sanatı"}).json()
     k2 = c.get(f"/v2/sessions/{r2['session_id']}").json()["alanlar"][0]["kaynaklar"]
     assert k2["kaynak_turu"] == "platform" and k2["secim"] is None and k2["arama"] == []
-    assert all("google.com" not in p["url"] for p in k2["platformlar"]) and k2["platformlar"][0]["url"].startswith("https://ocw.mit.edu/")
+    assert all("google.com" not in p["url"] for p in k2["platformlar"]) and k2["platformlar"][0]["url"].startswith("https://acikders.ankara.edu.tr/")
+    assert all(p["dil"] == "Türkçe" for p in k2["platformlar"])     # İngilizce karşılık bilinmiyor: İngilizce platformda Türkçe arama yok
+
+
+def test_baglama_duyarli_kaynak():
+    sid = c.post("/v2/sessions", json={"hobi": "İspanyolca"}).json()["session_id"]
+    k = c.get(f"/v2/sessions/{sid}").json()["alanlar"][0]["kaynaklar"]
+    assert k["secim"]["dil"] == "Türkçe" and "Duolingo" in k["yaklasim"]
+    assert all("İspanyolca" not in x["url"] for x in k["alternatifler"])
+    sid = c.post("/v2/sessions", json={"akademik": "Olasılık"}).json()["session_id"]
+    k = c.get(f"/v2/sessions/{sid}").json()["alanlar"][0]["kaynaklar"]
+    ing = [p for p in k["platformlar"] if p["dil"] == "İngilizce"]
+    assert ing and all(p["terim"] == "probability" and "probability" in p["url"] for p in ing)
 
 
 def test_ikiz_yalnizca_ogrettiklerini_bilir():

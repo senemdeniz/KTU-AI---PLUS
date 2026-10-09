@@ -253,7 +253,25 @@ _DEMO_KAVRAM.update({
         _Q("q3", "İlerlemeni nasıl ölçebilirsin?", "Aynı parçayı temiz çalabildiğin en yüksek BPM'i kaydedip zamanla karşılaştırarak.", ["bpm", "kaydet", "karşılaştır"]),
     ],
 })
+_DEMO_KAVRAM.update({
+    "ser ve estar": [
+        _Q("q1", "Ser ve estar arasındaki temel fark nedir?", "Ser kalıcı özellikler ve kimlik için, estar geçici durum ve konum için kullanılır.", ["kalıcı", "geçici", "durum"]),
+        _Q("q2", "'Madrid'deyim' derken hangisini kullanırsın, neden?", "Estar: konum bildirir (Estoy en Madrid).", ["estar", "konum", "yer"]),
+        _Q("q3", "'Yorgunum' ve 'Öğretmenim' cümlelerinde hangisi kullanılır?", "Yorgunum: estar (geçici durum); öğretmenim: ser (meslek, kimlik).", ["yorgun", "meslek", "kimlik"]),
+    ],
+    "cinsiyet ve artikeller": [
+        _Q("q1", "İspanyolcada isimlerin cinsiyeti nasıl anlaşılır?", "Çoğunlukla -o ile bitenler eril, -a ile bitenler dişildir; istisnalar vardır.", ["eril", "dişil", "-o"]),
+        _Q("q2", "El, la, los, las ne zaman kullanılır?", "El tekil eril, la tekil dişil, los çoğul eril, las çoğul dişil belirli artikeldir.", ["tekil", "çoğul", "eril"]),
+        _Q("q3", "Türkçede artikel yokken bunu nasıl hatırlarsın?", "Kelimeyi her zaman artikeliyle birlikte öğrenirim (la mesa, el libro).", ["birlikte", "artikel", "öğren"]),
+    ],
+})
 _DEMO_HINTS_Q.update({
+    "Ser ve estar arasındaki temel fark nedir?": "İkisi de 'olmak'. Hangisi kalıcı, hangisi geçici şeyler için? İkizine anlattın mı?",
+    "'Madrid'deyim' derken hangisini kullanırsın, neden?": "Bir yerde bulunmak kalıcı bir özellik mi, bir durum mu?",
+    "'Yorgunum' ve 'Öğretmenim' cümlelerinde hangisi kullanılır?": "Yorgunluk geçer; meslek kimliğin parçası. Bu farkı ikizine söyledin mi?",
+    "İspanyolcada isimlerin cinsiyeti nasıl anlaşılır?": "Kelimenin son harfine bak. İkizine bu ipucunu verdin mi?",
+    "El, la, los, las ne zaman kullanılır?": "Tekil/çoğul ve eril/dişil: dört artikeli ikizine eşleştirdin mi?",
+    "Türkçede artikel yokken bunu nasıl hatırlarsın?": "Kelimeyi tek başına mı, artikeliyle mi ezberliyorsun?",
     "G akorunda parmaklar hangi tellere ve perdelere basar?": "Hangi parmak hangi tele, kaçıncı perdeye? İkizine bunu adım adım anlattın mı?",
     "Akordaki bir tel ses vermiyorsa ilk neyi kontrol edersin?": "Ses vermeyen telin çevresinde ne oluyor? Komşu parmaklara bak.",
     "G akoruna geçişi hızlandırmak için ne yaparsın?": "Parmakları tek tek mi koyuyorsun, yoksa bir şekil olarak mı?",
