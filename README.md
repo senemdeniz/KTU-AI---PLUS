@@ -29,6 +29,12 @@ Bir **ajan ekibi (Gözlemevi)** seni rotanla karşılaştırır, plan tutmuyorsa
 
 ## Canlı demo özellikleri
 
+- **Canlı demo (kendi kendine oynar):** karşılama sayfasında "Canlı demoyu izle". Gerçek API çağrılarıyla Elif'in gökyüzünü kurar, 3 gün ilerletir, ikizine "bağlı liste"yi bilerek bir hatayla anlatır, Hakem'in hatayı işaretleyip VisuAlgo'ya yönlendirmesini gösterir, cümleyi düzeltir ve yıldızı halkalı yapar (~40 sn). İstediğin an "Durdur".
+- **Logo → Takımyıldızların:** İkiz logosuna tıklayınca açtığın tüm konular, rotaları ve ikizinin yıldızlarıyla tek sayfada.
+- **Çıkış ve devam anahtarı:** "Çıkış yap" bu cihazdan çıkarır; gökyüzün sunucuda kalır. Gösterilen 32 karakterlik devam anahtarıyla (şifre gibi sakla) karşılama sayfasından geri dönersin.
+- **Kaynak güvenilirliği:** her kaynakta yayıncı (ör. NUS, MIT, Python Software Foundation), güven düzeyi (yüksek/orta/düşük), elle doğrulama tarihi ve "Bağlantıları şimdi kontrol et" ile gerçek bağlantı durumu. Kendi kaynağını ekleyebilir, birincil yapabilirsin; Kaynak Avcısı alan adından yayıncıyı değerlendirir. Yalnızca https; iç ağ/yerel adresler (SSRF) ve güvensiz yönlendirmeler reddedilir.
+- **İkizine öğret, kavram başına:** her kavramın cümleleri ayrı tutulur. İkizin sayfasında her kavram için "İkizin bu kavramı senden nasıl öğrendi?" açılır: ona anlattığın cümleler ve sınavdaki her sorunun sonucu. Daha kötü bir deneme, halkalı bilgiyi silmez.
+
 - **Süreyi sen seçersin:** hedefe kaç günde ulaşmak istediğini (7–90 gün) profilde seçersin; Haritacı planı o güne yayar. Sonradan değiştirirsen geçmiş günlerin korunur, kalan görevler yeni takvime dağıtılır.
 - **Profil sayfası:** ad, günlük süre, saat, seviye, hedef, sınav tarihi güncellenir; ekip planı anında ayarlar.
 - **Takımyıldızların:** birden çok konu açabilirsin; "Gökyüzüme dön" açtığın tüm takımyıldızları gösterir.
@@ -72,7 +78,7 @@ Mobil uygulama (Expo) aynı API'yi kullanır: `cd mobile && npm install && EXPO_
 
 Hiçbiri yoksa **demo modu** çalışır: içerik elle yazılmış (Türev ve Gitar için özel), akış ve karar mantığı gerçektir.
 
-Testler: `python -m pytest -q` (27 test). API sözleşmesi: [`docs/API.md`](docs/API.md). Jüri anlatımı: [`DEMO.md`](DEMO.md).
+Testler: `python -m pytest -q` (29 test). API sözleşmesi: [`docs/API.md`](docs/API.md). Jüri anlatımı: [`DEMO.md`](DEMO.md).
 
 ## Güvenlik önlemleri (özet)
 

@@ -1,5 +1,7 @@
 # Jüri demosu (4–5 dakika)
 
+**En hızlı yol:** karşılama sayfasında **Canlı demoyu izle**. Uygulama öğretme akışını gerçek API çağrılarıyla kendi kendine oynatır (~40 sn); sen konuşurken ekranda adımlar ilerler. Aşağıdaki el ile akış, soru gelirse derine inmek için.
+
 Çalıştır: `python3 -m uvicorn server:app --port 8000` → tarayıcıda `http://127.0.0.1:8000`. Akış okunabilir hızda aksın diye `AJAN_GECIKME=0.7` (varsayılan). Persona: **Elif**, Veri Yapıları.
 
 1. **Profil (30 sn).** "İkizini oluştur" → konu: Veri Yapıları, seviye: Yeni başlıyorum, 30 dk. Onay kutusu: ajanlar ve ikiz yapay zekâdır, veriler silinebilir.

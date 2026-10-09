@@ -368,3 +368,73 @@ textarea.girdi{min-height:92px;resize:vertical}
 .cikti *{overflow-wrap:anywhere;min-width:0}
 .pratik .grafik svg{max-height:170px}
 @media (max-width:960px){.zihin{aspect-ratio:1/1}}
+
+/* ---------- Safari: düğme içinde grid yerine iç kap ---------- */
+.takim-kart,.takim-satir,.dugum{display:block}
+.takim-kart>.ic{display:grid;gap:4px}
+.takim-satir>.ic{display:grid;gap:2px}
+.dugum>.ic{display:grid;justify-items:center;gap:4px}
+.kart-gok{display:block;width:100%}
+.kart-gok svg{width:100%;height:auto;display:block;aspect-ratio:320/150}
+
+/* ---------- logo, mobil üst, çıkış ---------- */
+.logo-dugme{background:none;border:0;color:var(--yazi);cursor:pointer;padding:4px 6px;border-radius:10px;text-align:left}
+.logo-dugme:hover{background:rgba(245,215,142,.08)}
+.ana-kolon{min-width:0}
+.mobil-ust{display:none}
+.cikis{min-height:calc(100dvh - 140px);display:grid;align-content:center}
+.cikis-baslik{font-size:clamp(36px,5vw,64px);font-weight:800;margin-bottom:14px}
+.anahtar-kutu{margin-top:28px;border:1px solid var(--cizgi2);border-radius:var(--r-orta);padding:18px;display:grid;gap:10px;max-width:620px;background:rgba(13,20,48,.7)}
+.anahtar{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:15px;background:var(--gece);border:1px solid var(--cizgi);border-radius:10px;padding:10px 12px;word-break:break-all;user-select:all}
+.cikis-ozet{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px;margin-top:34px;max-width:900px}
+.anahtar-form{margin-top:22px;color:var(--sis)}
+.anahtar-form summary{cursor:pointer;font-weight:600;color:var(--altin)}
+.anahtar-form form{margin-top:12px;display:grid;gap:6px}
+
+/* ---------- takımyıldızların sayfası ---------- */
+.takim-izgara{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:18px}
+.takim-buyuk{border:1px solid var(--cizgi);border-radius:var(--r-buyuk);padding:18px;display:grid;gap:12px;background:rgba(13,20,48,.55);align-content:start}
+.takim-buyuk .kart-gok svg{aspect-ratio:520/230}
+.takim-buyuk-bas{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.takim-buyuk h3{font-size:22px}
+.kart-ikiz svg{width:100%;height:auto;display:block}
+.takim-buyuk.yeni{border-style:dashed}
+
+/* ---------- kaynak güvenilirliği ---------- */
+.bolum-bas{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+.guven-satiri{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center}
+.guven{font-size:12px;font-weight:800;border-radius:6px;padding:2px 8px}
+.guven.yuksek{background:rgba(143,227,180,.14);color:var(--yesil)}
+.guven.orta{background:rgba(245,215,142,.14);color:var(--altin)}
+.guven.dusuk{background:rgba(255,156,138,.14);color:var(--mercan)}
+.canli-durum{font-size:12px;display:inline-flex;align-items:center;gap:6px}
+.canli-durum::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--sis2)}
+.canli-durum.acik{color:var(--yesil)}.canli-durum.acik::before{background:var(--yesil)}
+.canli-durum.sorun{color:var(--mercan)}.canli-durum.sorun::before{background:var(--mercan)}
+.canli-durum.bekliyor{color:var(--sis2)}
+.kendi-bolum{margin-top:30px;padding-top:22px;border-top:1px solid var(--cizgi);display:grid;gap:14px}
+.kendi-liste{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:0}
+.kaynak.kendi.birincil h4{color:var(--altin)}
+.kendi-form{display:grid;gap:10px;max-width:640px}
+.kendi-form .secenekler .girdi{flex:1;min-width:180px}
+
+/* ---------- ikizin ayrıntı ---------- */
+.ikiz-detay{margin-top:8px}
+.ikiz-detay summary{cursor:pointer;color:var(--mavi);font-size:14px;font-weight:600}
+.kucuk-liste li{font-size:14px;padding:6px 0}
+.soru-sonuc{margin:4px 0 0;padding:0;list-style:none;display:grid;gap:6px;font-size:14px}
+
+/* ---------- canlı demo şeridi ---------- */
+#demo-serit{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:40;width:min(760px,calc(100vw - 24px));background:rgba(19,27,61,.97);border:1px solid var(--altin);border-radius:18px;box-shadow:0 16px 48px rgba(0,0,0,.5);overflow:hidden}
+.demo-ilerleme{height:3px;background:var(--cizgi)}
+.demo-ilerleme i{display:block;height:100%;background:var(--altin);transition:width .4s}
+.demo-ic{padding:14px 18px;display:grid;gap:8px}
+.demo-ic p{font-size:15px;max-width:none}
+.demo-etiket{font-size:12px;font-weight:800;color:var(--altin)}
+.demo-vurgu{outline:3px solid var(--altin);outline-offset:4px}
+
+@media (max-width:960px){
+  .mobil-ust{display:flex;justify-content:space-between;align-items:center;padding:12px 18px 0}
+  #demo-serit{bottom:86px}
+}
+.kaynak-ana a.dugme,.kaynak a.dugme{color:var(--gece);text-decoration:none}
