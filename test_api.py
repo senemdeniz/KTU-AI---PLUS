@@ -1,5 +1,5 @@
 import os, tempfile
-os.environ.update(AJAN_SENKRON="1", AJAN_GECIKME="0", LLM_PROVIDER="mock", IKIZ_YAZMA_LIMIT="100000", IKIZ_GENEL_LIMIT="100000")
+os.environ.update(AJAN_SENKRON="1", AJAN_GECIKME="0", LLM_PROVIDER="mock", IKIZ_YAZMA_LIMIT="100000", IKIZ_GENEL_LIMIT="100000", IKIZ_AG_KAPALI="1")
 os.environ["IKIZ_DB"] = os.path.join(tempfile.mkdtemp(), "t.db")
 from fastapi.testclient import TestClient
 import store
@@ -211,3 +211,45 @@ def test_ajan_ciktisi_ve_hakem_yonlendirme():
     # parlaklık = ikizin başarısı
     a = c.get(f"/v2/sessions/{sid}").json()["alanlar"][0]
     assert a["ilerleme"]["parlaklik"] == a["ikiz"]["bilgi_yuzde"]
+
+
+def test_kavram_basina_cumleler():
+    r = c.post("/v2/sessions", json={"akademik": "Veri Yapıları", "sure": 21}).json(); sid = r["session_id"]
+    c.post(f"/v2/sessions/{sid}/demo/skip", json={"gun": 8, "tutarlilik": 1.0})
+    a = c.get(f"/v2/sessions/{sid}").json()["alanlar"][0]
+    acik = [y for y in a["ikiz"]["yildizlar"] if y["acik"]]
+    k1, k2 = acik[0]["id"], acik[1]["id"]
+    c.post(f"/v2/sessions/{sid}/teach/select", json={"alan": "akademik", "kavram": k1})
+    c.post(f"/v2/sessions/{sid}/teach/add", json={"metin": "Bağlı listede her düğüm bir sonraki düğümü işaret eder. Erişim için baştan gezmek gerekir, indeks yoktur. Baştan ekleme hızlıdır, kaydırma gerekmez."})
+    ex = c.post(f"/v2/sessions/{sid}/teach/exam").json()
+    assert ex["sonuc"]["kavram"] == acik[0]["baslik"] and ex["sonuc"]["star"] == "halkali"
+    v = c.post(f"/v2/sessions/{sid}/teach/select", json={"alan": "akademik", "kavram": k2}).json()
+    assert v["ogret"]["kavram"] == k2 and v["ogret"]["cumleler"] == []
+    v = c.post(f"/v2/sessions/{sid}/teach/select", json={"alan": "akademik", "kavram": k1}).json()
+    assert len(v["ogret"]["cumleler"]) == 3 and v["ogret"]["son"]["star"] == "halkali"
+    y = next(y for y in v["alanlar"][0]["ikiz"]["yildizlar"] if y["id"] == k1)
+    assert len(y["cumleler"]) == 3 and y["sorular"] and all(q["sonuc"] == "dogru" for q in y["sorular"])
+    # daha kötü bir deneme halkalı bilgiyi silmez
+    c.delete(f"/v2/sessions/{sid}/teach/sentences/3")
+    c.delete(f"/v2/sessions/{sid}/teach/sentences/2")
+    c.post(f"/v2/sessions/{sid}/teach/exam")
+    y = next(y for y in c.get(f"/v2/sessions/{sid}").json()["alanlar"][0]["ikiz"]["yildizlar"] if y["id"] == k1)
+    assert y["star"] == "halkali"
+
+
+def test_kendi_kaynak_ve_guvenlik():
+    sid = c.post("/v2/sessions", json={"akademik": "Veri Yapıları"}).json()["session_id"]
+    for kotu in ["http://ornek.com", "https://127.0.0.1/admin", "https://localhost:8000/", "javascript:alert(1)", "https://a:b@ornek.com"]:
+        assert c.post(f"/v2/sessions/{sid}/sources", json={"alan": "akademik", "baslik": "Deneme", "url": kotu}).status_code == 422, kotu
+    assert c.post(f"/v2/sessions/{sid}/sources", json={"alan": "akademik", "baslik": "Numaram 0532 123 45 67"}).status_code == 422
+    r = c.post(f"/v2/sessions/{sid}/sources", json={"alan": "akademik", "baslik": "Hocamın ders notları", "tur": "Ders notu"}).json()
+    assert r["ok"] and r["kaynak"]["guven"] == "düşük"
+    kid = r["kaynak"]["id"]
+    assert c.post(f"/v2/sessions/{sid}/sources/primary", json={"alan": "akademik", "kaynak_id": kid}).json()["ok"]
+    a = c.get(f"/v2/sessions/{sid}").json()["alanlar"][0]
+    assert a["birincil"] == kid and a["kendi_kaynaklar"][0]["baslik"] == "Hocamın ders notları"
+    assert a["kaynaklar"]["secim"]["yayinci"] and a["kaynaklar"]["secim"]["guven"] in ("yüksek", "orta")
+    k = c.post(f"/v2/sessions/{sid}/sources/check", json={"alan": "akademik"}).json()
+    assert k["ok"] and k["toplam"] >= 6
+    assert c.delete(f"/v2/sessions/{sid}/sources/akademik/{kid}").json()["ok"]
+    assert c.get(f"/v2/sessions/{sid}").json()["alanlar"][0]["birincil"] is None

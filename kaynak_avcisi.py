@@ -84,6 +84,115 @@ GUVENILIR_PLATFORMLAR = [
 ]
 
 
+# ------------------------------------------------------------- güvenilirlik
+# Yayıncı bilgisi elle doğrulandı (sayfalar açılıp yazar/kurum kontrol edildi).
+YAYINCI = {
+    "runestone": ("Brad Miller ve David Ranum (Luther College); Runestone Academy'de ücretsiz", "acik_kitap"),
+    "visualgo": ("Doç. Dr. Steven Halim, Singapur Ulusal Üniversitesi (NUS)", "universite"),
+    "mit6006": ("MIT OpenCourseWare", "universite"),
+    "ucsd": ("UC San Diego, Coursera üzerinden", "universite"),
+    "pydocs": ("Python Software Foundation (resmî belge)", "resmi"),
+    "bigo": ("Eric Rowell ve 51 GitHub katkıcısı (topluluk)", "topluluk"),
+    "lamar": ("Paul Dawkins, Lamar University", "universite"),
+    "khan-calc1": ("Khan Academy (kâr amacı gütmeyen eğitim kurumu)", "kurum"),
+    "mit1801": ("MIT OpenCourseWare", "universite"),
+    "3b1b": ("Grant Sanderson (3Blue1Brown)", "egitmen"),
+    "justin": ("Justin Sandercoe (JustinGuitar)", "egitmen"),
+    "metronom": ("Metronome Online (araç)", "arac"),
+}
+YAYINCI_TURU = {"universite": "Üniversite", "resmi": "Resmî belge", "acik_kitap": "Akademik açık ders kitabı", "kurum": "Eğitim kurumu",
+                "egitmen": "Tanınmış eğitmen", "topluluk": "Topluluk kaynağı", "arac": "Araç", "bilinmiyor": "Bilinmeyen yayıncı"}
+GUVEN = {"universite": "yüksek", "resmi": "yüksek", "acik_kitap": "yüksek", "kurum": "yüksek", "egitmen": "orta", "topluluk": "orta", "arac": "orta", "bilinmiyor": "düşük"}
+
+# Kullanıcının eklediği kaynaklar için bilinen alan adları
+_BILINEN_ALANLAR = [
+    (r"(^|\.)ocw\.mit\.edu$", "MIT OpenCourseWare", "universite"), (r"(^|\.)mit\.edu$", "MIT", "universite"),
+    (r"\.edu(\.[a-z]{2})?$", "Üniversite alan adı (.edu)", "universite"), (r"\.edu\.tr$", "Türk üniversitesi alan adı", "universite"),
+    (r"\.gov(\.[a-z]{2})?$", "Devlet kurumu", "resmi"), (r"(^|\.)docs\.python\.org$", "Python Software Foundation", "resmi"),
+    (r"(^|\.)khanacademy\.org$", "Khan Academy", "kurum"), (r"(^|\.)coursera\.org$", "Coursera (kurs sağlayıcısına bakılmalı)", "kurum"),
+    (r"(^|\.)edx\.org$", "edX (kurs sağlayıcısına bakılmalı)", "kurum"), (r"(^|\.)runestone\.academy$", "Runestone Academy", "acik_kitap"),
+    (r"(^|\.)visualgo\.net$", "VisuAlgo (NUS)", "universite"), (r"(^|\.)wikipedia\.org$", "Vikipedi (ansiklopedi; kaynakçasını kontrol et)", "topluluk"),
+    (r"(^|\.)github\.com$", "GitHub (yazarına bakılmalı)", "topluluk"), (r"(^|\.)(youtube\.com|youtu\.be)$", "YouTube (kanala bakılmalı)", "topluluk"),
+    (r"(^|\.)stackoverflow\.com$", "Stack Overflow (topluluk)", "topluluk"), (r"(^|\.)(meb\.gov\.tr|eba\.gov\.tr)$", "MEB / EBA", "resmi"),
+]
+
+
+def guvenilirlik(k: dict) -> dict:
+    yayinci, tur = YAYINCI.get(k.get("id", ""), (k.get("yayinci") or "Bilinmiyor", k.get("yayinci_turu") or "bilinmiyor"))
+    return {"yayinci": yayinci, "yayinci_turu": YAYINCI_TURU[tur], "guven": GUVEN[tur], "dogrulama": k.get("dogrulama", DOGRULAMA_TARIHI)}
+
+
+def url_kontrol_et(url: str) -> tuple[bool, str]:
+    """Kullanıcı URL'si güvenli mi? Yalnızca https, iç ağ/yerel adres yok (SSRF'e karşı)."""
+    import ipaddress, socket
+    from urllib.parse import urlsplit
+    try:
+        u = urlsplit(url.strip())
+    except ValueError:
+        return False, "Bağlantı okunamadı."
+    if u.scheme != "https" or not u.hostname:
+        return False, "Yalnızca https:// ile başlayan bağlantılar kabul edilir."
+    if u.username or u.password or (u.port not in (None, 443)):
+        return False, "Bu bağlantı biçimi kabul edilmiyor."
+    if len(url) > 500:
+        return False, "Bağlantı çok uzun."
+    try:
+        ipler = {ai[4][0] for ai in socket.getaddrinfo(u.hostname, 443, proto=socket.IPPROTO_TCP)}
+    except OSError:
+        return True, ""          # çözülemedi: kaydı engelleme, canlı kontrolde 'açılmıyor' görünür
+    for ip in ipler:
+        a = ipaddress.ip_address(ip.split("%")[0])
+        if a.is_private or a.is_loopback or a.is_link_local or a.is_reserved or a.is_multicast or a.is_unspecified:
+            return False, "Bu bağlantı yerel ya da iç ağdaki bir adrese gidiyor; kabul edilmiyor."
+    return True, ""
+
+
+def alan_adi_degerlendir(url: str | None) -> dict:
+    import re as _re
+    from urllib.parse import urlsplit
+    if not url:
+        return {"yayinci": "Bağlantısız kaynak (kitap, not vb.)", "yayinci_turu": YAYINCI_TURU["bilinmiyor"], "guven": "düşük", "tanindi": False}
+    host = (urlsplit(url).hostname or "").lower()
+    for desen, ad, tur in _BILINEN_ALANLAR:
+        if _re.search(desen, host):
+            return {"yayinci": ad, "yayinci_turu": YAYINCI_TURU[tur], "guven": GUVEN[tur], "tanindi": True}
+    return {"yayinci": host, "yayinci_turu": YAYINCI_TURU["bilinmiyor"], "guven": "düşük", "tanindi": False}
+
+
+def baglanti_kontrol(urller: list[str], zaman_asimi: float = 6.0) -> dict:
+    """Bağlantıları gerçekten açmayı dener (kullanıcının bilgisayarından). Yönlendirmeler de iç ağa gidemez."""
+    import os, time, urllib.request, urllib.error
+    from concurrent.futures import ThreadPoolExecutor
+    if os.environ.get("IKIZ_AG_KAPALI") == "1":
+        return {u: {"durum": "kontrol_edilmedi", "kod": None, "ms": None} for u in urller}
+
+    class _Yon(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            ok, _ = url_kontrol_et(newurl)
+            if not ok:
+                raise urllib.error.HTTPError(newurl, 451, "güvensiz yönlendirme", headers, fp)
+            return super().redirect_request(req, fp, code, msg, headers, newurl)
+    acici = urllib.request.build_opener(_Yon())
+
+    def bir(u):
+        ok, _ = url_kontrol_et(u)
+        if not ok:
+            return u, {"durum": "reddedildi", "kod": None, "ms": None}
+        t0 = time.time()
+        try:
+            req = urllib.request.Request(u, headers={"User-Agent": "Mozilla/5.0 (ikiz kaynak kontrol)", "Range": "bytes=0-2047"})
+            with acici.open(req, timeout=zaman_asimi) as r:
+                r.read(2048)
+                return u, {"durum": "acik", "kod": r.status, "ms": int((time.time() - t0) * 1000)}
+        except urllib.error.HTTPError as e:
+            # 401/403/405/429: site var ama otomatik isteği reddediyor; tarayıcıda açılır
+            return u, {"durum": "acik" if e.code in (401, 403, 405, 429) else "hata", "kod": e.code, "ms": int((time.time() - t0) * 1000)}
+        except Exception:  # noqa: BLE001
+            return u, {"durum": "ulasilamadi", "kod": None, "ms": None}
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        return dict(ex.map(bir, list(dict.fromkeys(urller))[:20]))
+
+
 def kavram_bolumu(kavram: str) -> list[dict]:
     """Bir kavram için doğrulanmış kaynak bölümleri: [{baslik, url}]."""
     n = gv._norm(kavram)
@@ -157,6 +266,8 @@ def tara(konu: str, seviye: str = "baslangic", dakika: int = 30, not_: str = "")
             p, neden = _puan(k, seviye, dakika)
             puanli.append({**k, "puan": p, "neden": neden})
         puanli.sort(key=lambda x: -x["puan"])
+        for x in puanli:
+            x.update(guvenilirlik(x))
         secim, alt = puanli[0], puanli[1:]
         secim["gerekce"] = f"{secim['tur']}: " + ", ".join(secim["neden"]) + ". " + secim["not"]
         for a in alt:

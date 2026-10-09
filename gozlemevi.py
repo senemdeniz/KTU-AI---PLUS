@@ -561,8 +561,10 @@ def ogret_ekle(sid: str, metin: str, alan: str) -> dict:
     with store.lock(sid):
         if alan not in s["tracks"]:
             alan = next(iter(s["tracks"]))
+        if s["ogret"]["alan"] != alan:
+            _ogret_sec(s, alan, None)
         t = s["ogret"]
-        mevcut = t["cumleler"] if t["alan"] == alan else []
+        mevcut = t["cumleler"]
         d = gv.denetle(metin)
         if not d.izin:
             emit(s, "Gözlemevi", f"Anlatım ikize gönderilmedi ({d.engel}).", "guard")
@@ -580,8 +582,38 @@ def ogret_ekle(sid: str, metin: str, alan: str) -> dict:
         if len("\n".join(birlesik)) > gv.MAX_KARAKTER or len(birlesik) > gv.MAX_CUMLE:
             return {"ok": False, "engel": "cok_uzun", "mesaj": "İkizin için yeterince anlattın; bir kısmını silip sadeleştir.", "uyarilar": []}
         t.update({"alan": alan, "konu": ogret_konu(s, alan), "cumleler": birlesik, "son": None})
+        emit(s, "İkiz", f"{len(yeni)} yeni cümle dinledi; sınavda yalnızca bunları kullanabilecek.", "info", alan=alan)
         store.save(s)
         return {"ok": True, "uyarilar": d.uyarilar}
+
+
+def _ogret_sec(s: dict, alan: str, kavram: str | None) -> None:
+    """Öğretilen kavramı değiştirir. Her kavramın cümleleri ayrı tutulur; geri dönünce kaldığın yerden devam edersin."""
+    t = s["ogret"]
+    taslak = s.setdefault("ogret_taslak", {})
+    taslak[f"{t['alan']}|{t.get('kavram') or ''}"] = {"cumleler": t["cumleler"], "son": t["son"]}
+    anahtar = f"{alan}|{kavram or ''}"
+    tr = s["tracks"][alan]
+    if anahtar in taslak:
+        d = taslak[anahtar]
+    elif kavram and kavram in tr.get("ikiz_bilgi", {}):
+        b = tr["ikiz_bilgi"][kavram]
+        d = {"cumleler": list(b.get("cumleler", [])), "son": b.get("son")}
+    else:
+        d = {"cumleler": [], "son": None}
+    t.update({"alan": alan, "kavram": kavram, "konu": ogret_konu(s, alan), "cumleler": list(d["cumleler"]), "son": d["son"]})
+
+
+def ogret_sec(sid: str, alan: str, kavram: str | None) -> dict:
+    s = store.get(sid)
+    with store.lock(sid):
+        if alan not in s["tracks"]:
+            return {"ok": False, "mesaj": "Takımyıldız bulunamadı."}
+        if kavram and kavram != "serbest" and not any(x["id"] == kavram for x in _anlat_gorevleri(s["tracks"][alan])):
+            return {"ok": False, "mesaj": "Kavram bulunamadı."}
+        _ogret_sec(s, alan, kavram)
+        store.save(s)
+        return {"ok": True}
 
 
 def ogret_cumle_sil(sid: str, no: int) -> dict:
@@ -632,8 +664,11 @@ def ogret_sinav(sid: str, gorev_id: str | None = None) -> dict:
             return {"ok": False, "mesaj": "İkizine önce birkaç cümle anlat."}
         alan = t["alan"]
         tr = s["tracks"][alan]
-        gorev = _ogretilecek_gorev(s, alan, gorev_id)
-        if gorev_id and not gorev:
+        if gorev_id is None:
+            gorev_id = t.get("kavram")
+        serbest = gorev_id == "serbest"
+        gorev = None if serbest else _ogretilecek_gorev(s, alan, gorev_id)
+        if gorev_id and not serbest and not gorev:
             return {"ok": False, "mesaj": "Bu kavramın günü henüz gelmedi; önce bugüne kadarki kavramları öğret."}
         baslik = _anlat_basligi(gorev) if gorev else t["konu"]
 
@@ -654,8 +689,14 @@ def ogret_sinav(sid: str, gorev_id: str | None = None) -> dict:
         t["son"] = gorunum
         if sonuc.exam:
             anahtar = gorev["id"] if gorev else f"serbest-{len(tr.get('ikiz_bilgi', {})) + 1}"
-            tr.setdefault("ikiz_bilgi", {})[anahtar] = {"baslik": baslik, "star": sonuc.star, "score": sonuc.score,
-                                                         "total": len(sonuc.exam), "gun": tr["twin"]["day"] + 1}
+            onceki = tr.setdefault("ikiz_bilgi", {}).get(anahtar)
+            if onceki and onceki.get("star") == "halkali" and sonuc.star != "halkali":
+                emit(s, "İkiz", f"“{baslik}” için önceki anlatımın daha iyiydi; bilgimi korudum, bu denemeyi kaydetmedim.", "info", alan=alan)
+            else:
+                tr["ikiz_bilgi"][anahtar] = {"baslik": baslik, "star": sonuc.star, "score": sonuc.score, "total": len(sonuc.exam),
+                                             "gun": tr["twin"]["day"] + 1, "cumleler": list(t["cumleler"]), "son": gorunum,
+                                             "deneme": (onceki or {}).get("deneme", 0) + 1}
+            t["kavram"] = gorev["id"] if gorev else "serbest"
             if sonuc.star == "sonuk":
                 emit(s, "İkiz", f"“{baslik}” hakkında hâlâ bir şey bilmiyorum. Bana biraz daha anlatır mısın?", "info", alan=alan)
             else:
@@ -681,8 +722,12 @@ def _ikiz_gorunum(s: dict, tr: dict) -> dict:
         b = bilgi.get(x["id"])
         yildizlar.append({"id": x["id"], "baslik": _anlat_basligi(x), "gun": x["day"], "acik": x["day"] <= bugun,
                           "bolum": kaynak_avcisi.kavram_bolumu(_anlat_basligi(x)),
+                          "cumleler": b.get("cumleler", []) if b else [], "deneme": b.get("deneme", 0) if b else 0,
+                          "sorular": [{"soru": m["question"], "sonuc": m["result"]} for m in ((b or {}).get("son") or {}).get("items", [])],
                           "star": b["star"] if b else "sonuk", "score": b["score"] if b else 0, "total": b["total"] if b else 0})
-    serbest = [{"id": k, "baslik": v["baslik"], "gun": v["gun"], "acik": True, "star": v["star"], "score": v["score"], "total": v["total"]}
+    serbest = [{"id": k, "baslik": v["baslik"], "gun": v["gun"], "acik": True, "star": v["star"], "score": v["score"], "total": v["total"],
+                "bolum": [], "cumleler": v.get("cumleler", []), "deneme": v.get("deneme", 0),
+                "sorular": [{"soru": m["question"], "sonuc": m["result"]} for m in (v.get("son") or {}).get("items", [])]}
                for k, v in bilgi.items() if k.startswith("serbest-")]
     hepsi = yildizlar + serbest
     toplam = max(len(yildizlar), 1)
@@ -730,6 +775,7 @@ def gorunum(sid: str) -> dict | None:
                          "parlaklik": _parlaklik(tr), "egri": _egri(tr)},
             "ikiz": _ikiz_gorunum(s, tr),
             "haftalar": tr["roadmap"]["weeks"], "kaynaklar": tr.get("kaynaklar"), "pratik": tr.get("pratik", [])[-30:],
+            "kendi_kaynaklar": tr.get("kendi_kaynaklar", []), "birincil": tr.get("birincil"), "kaynak_kontrol": tr.get("kaynak_kontrol"),
             "beceriler": sorted({x["skill"] for x in tr["roadmap"]["tasks"]}),
             "harita": [{"id": x["id"], "day": x["day"], "title": x["title"], "type": x["type"], "minutes": x["minutes"],
                         "done": bool(x["done"] or x["id"] in s["bitenler"])} for x in tr["roadmap"]["tasks"]],
@@ -748,7 +794,7 @@ def gorunum(sid: str) -> dict | None:
         "son_tarihler": [{**d, "kalan_gun": (dt.date.fromisoformat(d["tarih"]) - today).days} for d in s["son_tarihler"]],
         "koc": s["coach"], "oneriler": [{k: v for k, v in p.items() if k != "roadmap"} for p in s["oneriler"].values() if p["durum"] == "bekliyor"],
         "gorevler": s["gorevler"][-3:],
-        "ogret": {"alan": s["ogret"]["alan"], "konu": s["ogret"]["konu"], "cumleler": s["ogret"]["cumleler"], "son": s["ogret"]["son"]},
+        "ogret": {"alan": s["ogret"]["alan"], "kavram": s["ogret"].get("kavram"), "konu": s["ogret"]["konu"], "cumleler": s["ogret"]["cumleler"], "son": s["ogret"]["son"]},
         "ajanlar": [{**a, "son": son_olay.get(a["ad"])} for a in AJANLAR],
         "son_olay_id": len(s["olaylar"]),
         "sohbet": s.get("sohbet", [])[-30:], "sohbet_ajanlari": SOHBET_AJANLARI,
@@ -769,7 +815,7 @@ def yeni_oturum(ad: str, akademik: str | None, hobi: str | None, dakika: int, za
     s = {"id": sid, "name": ad or "Elif", "daily_minutes": dakika, "zaman": zaman, "baslangic": dt.date.today().isoformat(),
          "son_tarihler": son_tarihler, "seviye": seviye, "not": not_[:200], "sure": sure, "tracks": tracks, "pratik": [], "durum": "kuruluyor", "olaylar": [], "bitenler": [], "coach": None,
          "oneriler": {}, "gorevler": [],
-         "ogret": {"alan": "akademik" if akademik else "hobi", "konu": "", "cumleler": [], "son": None}}
+         "ogret": {"alan": "akademik" if akademik else "hobi", "kavram": None, "konu": "", "cumleler": [], "son": None}}
     first = s["ogret"]["alan"]
     s["ogret"]["konu"] = tracks[first]["topic"].split("·")[-1].strip()
     store.save(s)
@@ -1115,3 +1161,92 @@ def ajan_ciktisi(sid: str, ajan: str) -> dict | None:
         md += [f"## {x['baslik']}", *[f"- {y}" for y in x["satirlar"]], ""]
     bilgi = next((a for a in AJANLAR if a["ad"] == ajan), None)
     return {"ajan": ajan, "rol": bilgi["rol"] if bilgi else "", "bolumler": bolumler, "markdown": "\n".join(md)}
+
+
+
+# ------------------------------------------------------- kaynak güvenilirliği
+def _kaynak_urlleri(tr: dict) -> list[str]:
+    k = tr.get("kaynaklar") or {}
+    urller = []
+    if k.get("secim"):
+        urller.append(k["secim"]["url"])
+    urller += [x["url"] for x in k.get("alternatifler", [])]
+    urller += [x["url"] for x in k.get("platformlar", [])]
+    urller += [x["url"] for x in tr.get("kendi_kaynaklar", []) if x.get("url")]
+    for y in _anlat_gorevleri(tr) if "roadmap" in tr else []:
+        urller += [b["url"] for b in kaynak_avcisi.kavram_bolumu(_anlat_basligi(y))]
+    return list(dict.fromkeys(urller))
+
+
+def kaynak_kontrol(sid: str, alan: str) -> dict:
+    """Kaynak Avcısı yol haritasındaki her bağlantıyı tek tek açmayı dener (ağ isteği kilit dışında yapılır)."""
+    s = store.get(sid)
+    if alan not in s["tracks"]:
+        return {"ok": False, "mesaj": "Takımyıldız bulunamadı."}
+    urller = _kaynak_urlleri(s["tracks"][alan])
+    with store.lock(sid):
+        emit(s, "Kaynak Avcısı", f"{len(urller)} bağlantıyı tek tek açıp kontrol ediyor…", "start", alan=alan)
+    sonuc = kaynak_avcisi.baglanti_kontrol(urller)
+    with store.lock(sid):
+        tr = s["tracks"][alan]
+        tr["kaynak_kontrol"] = {"zaman": dt.datetime.now().isoformat(timespec="minutes"), "sonuc": sonuc}
+        acik = sum(1 for v in sonuc.values() if v["durum"] == "acik")
+        sorun = [u for u, v in sonuc.items() if v["durum"] in ("hata", "ulasilamadi", "reddedildi")]
+        emit(s, "Kaynak Avcısı", f"{acik}/{len(sonuc)} bağlantı şu an açılıyor." + (f" {len(sorun)} bağlantıya ulaşılamadı; internet bağlantını kontrol et ya da bu kaynakları sonra yeniden dene." if sorun else ""),
+             "done" if not sorun else "decision", alan=alan)
+        store.save(s)
+        return {"ok": True, "acik": acik, "toplam": len(sonuc)}
+
+
+def kaynak_ekle(sid: str, alan: str, baslik: str, url: str | None, tur: str, not_: str = "") -> dict:
+    s = store.get(sid)
+    with store.lock(sid):
+        if alan not in s["tracks"]:
+            return {"ok": False, "mesaj": "Takımyıldız bulunamadı."}
+        for metin in (baslik, not_):
+            if metin:
+                d = gv.denetle(metin)
+                if not d.izin:
+                    return {"ok": False, "mesaj": d.mesaj}
+        if url:
+            ok, neden = kaynak_avcisi.url_kontrol_et(url)
+            if not ok:
+                return {"ok": False, "mesaj": neden}
+        tr = s["tracks"][alan]
+        liste = tr.setdefault("kendi_kaynaklar", [])
+        if len(liste) >= 10:
+            return {"ok": False, "mesaj": "En fazla 10 kendi kaynağını ekleyebilirsin."}
+        deg = kaynak_avcisi.alan_adi_degerlendir(url)
+        k = {"id": uuid.uuid4().hex[:8], "baslik": baslik.strip()[:120], "url": url or None, "tur": tur[:30], "not": not_[:200],
+             "eklenme": dt.date.today().isoformat(), **deg}
+        liste.append(k)
+        yorum = ("Bilinen bir kurum: güvenilirliği yüksek." if deg["guven"] == "yüksek" else
+                 "Tanınan bir platform ama içeriği yazarına göre değişir; yazarına bak." if deg["guven"] == "orta" else
+                 "Yayıncısını tanımıyorum; yazarını ve tarihini kontrol etmeni öneririm.")
+        emit(s, "Kaynak Avcısı", f"Senin kaynağını değerlendirdi: “{k['baslik']}” ({deg['yayinci']}). {yorum}", "done", alan=alan)
+        store.save(s)
+        return {"ok": True, "kaynak": k}
+
+
+def kaynak_sil(sid: str, alan: str, kid: str) -> dict:
+    s = store.get(sid)
+    with store.lock(sid):
+        tr = s["tracks"].get(alan, {})
+        once = len(tr.get("kendi_kaynaklar", []))
+        tr["kendi_kaynaklar"] = [x for x in tr.get("kendi_kaynaklar", []) if x["id"] != kid]
+        if tr.get("birincil") == kid:
+            tr["birincil"] = None
+        store.save(s)
+        return {"ok": len(tr["kendi_kaynaklar"]) < once}
+
+
+def kaynak_birincil(sid: str, alan: str, kid: str | None) -> dict:
+    s = store.get(sid)
+    with store.lock(sid):
+        tr = s["tracks"].get(alan)
+        if not tr or (kid and not any(x["id"] == kid for x in tr.get("kendi_kaynaklar", []))):
+            return {"ok": False}
+        tr["birincil"] = kid
+        emit(s, "Kaynak Avcısı", "Birincil kaynağını sen seçtin; planda onu öne aldım." if kid else "Birincil kaynak yeniden benim önerime döndü.", "info", alan=alan)
+        store.save(s)
+        return {"ok": True}

@@ -323,6 +323,73 @@ def ogret_cumle_sil(sid: str, no: int):
     return out
 
 
+
+class SecIstek(BaseModel):
+    alan: str = Field(max_length=20)
+    kavram: str | None = Field(default=None, max_length=40)
+
+
+@app.post("/v2/sessions/{sid}/teach/select")
+def ogret_sec(sid: str, r: SecIstek):
+    _var(sid)
+    out = g.ogret_sec(sid, r.alan, r.kavram)
+    if not out["ok"]:
+        raise HTTPException(404, out["mesaj"])
+    return g.gorunum(sid)
+
+
+class KaynakIstek(BaseModel):
+    alan: str = Field(max_length=20)
+    baslik: str = Field(min_length=2, max_length=120)
+    url: str | None = Field(default=None, max_length=500)
+    tur: str = Field(default="Diğer", max_length=30)
+    not_: str = Field(default="", max_length=200, alias="not")
+    model_config = {"populate_by_name": True}
+
+
+@app.post("/v2/sessions/{sid}/sources")
+def kaynak_ekle(sid: str, r: KaynakIstek):
+    _var(sid)
+    out = g.kaynak_ekle(sid, r.alan, r.baslik, (r.url or "").strip() or None, r.tur, r.not_)
+    if not out["ok"]:
+        raise HTTPException(422, out["mesaj"])
+    return out
+
+
+@app.delete("/v2/sessions/{sid}/sources/{alan}/{kid}")
+def kaynak_sil(sid: str, alan: str, kid: str):
+    _var(sid)
+    if not g.kaynak_sil(sid, alan, kid)["ok"]:
+        raise HTTPException(404, "Kaynak bulunamadı")
+    return {"ok": True}
+
+
+class BirincilIstek(BaseModel):
+    alan: str = Field(max_length=20)
+    kaynak_id: str | None = Field(default=None, max_length=20)
+
+
+@app.post("/v2/sessions/{sid}/sources/primary")
+def kaynak_birincil(sid: str, r: BirincilIstek):
+    _var(sid)
+    if not g.kaynak_birincil(sid, r.alan, r.kaynak_id)["ok"]:
+        raise HTTPException(404, "Kaynak bulunamadı")
+    return {"ok": True}
+
+
+class KontrolIstek(BaseModel):
+    alan: str = Field(max_length=20)
+
+
+@app.post("/v2/sessions/{sid}/sources/check")
+def kaynak_kontrol(sid: str, r: KontrolIstek):
+    _var(sid)
+    out = g.kaynak_kontrol(sid, r.alan)
+    if not out["ok"]:
+        raise HTTPException(404, out["mesaj"])
+    return out
+
+
 # Web arayüzü (aynı kökenden servis edilir; API ile aynı sunucu)
 _WEB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
 if os.path.isdir(_WEB):
