@@ -2,10 +2,15 @@
   "name": "İkiz",
   "image": "mcr.microsoft.com/devcontainers/python:3.12",
   "postCreateCommand": "pip install -r requirements.txt -r requirements-dev.txt",
-  "postStartCommand": "nohup python3 -m uvicorn server:app --host 0.0.0.0 --port 8000 > /tmp/ikiz.log 2>&1 &",
-  "forwardPorts": [8000],
+  "postStartCommand": "IKIZ_PROXY=1 nohup python3 -m uvicorn server:app --host 0.0.0.0 --port 8000 > /tmp/ikiz.log 2>&1 &",
+  "forwardPorts": [
+    8000
+  ],
   "portsAttributes": {
-    "8000": { "label": "İkiz", "onAutoForward": "openBrowser" }
+    "8000": {
+      "label": "İkiz",
+      "onAutoForward": "openBrowser"
+    }
   },
   "secrets": {
     "LLM_API_KEY": {

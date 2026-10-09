@@ -67,6 +67,8 @@ Sol alttaki rozet **“Demo modu”** yerine **“Canlı model: …”** göster
   - Fotoğraftan öğretmek için `LLM_VISION_MODEL` değişkenine sağlayıcının görüntü modelini yaz.
   - Groq'ta sesli anlatım sunucudaki Whisper ile kendiliğinden açılır. Diğer sağlayıcılarda tarayıcının ses tanıması kullanılır.
 - **Model yanıt vermezse ya da bozuk JSON döndürürse** ilgili ajan hazır içeriğe düşer ve bunu akışta söyler. Uygulama model yüzünden çökmez.
+- **Hız sınırına takılırsa** (ücretsiz katmanlarda dakikalık sınır var), istek kısa bir beklemeyle iki kez yeniden denenir. Neden başarısız olduğu sunucu terminaline yazılır.
+- **Proxy arkasında yayınlarken** (Render, Railway gibi) `IKIZ_PROXY=1` ver; hız sınırları kullanıcı başına uygulanır. Codespaces yapılandırması bunu kendisi yapar.
 
 ---
 
@@ -117,6 +119,7 @@ Türk birine İspanyolca öğretmek ile bir öğrenciye veri yapıları öğretm
 - **Hesap:** Şifreler `scrypt` ile tuzlanıp saklanır; düz metin hiçbir yerde durmaz. Giriş, yalnızca sunucunun okuyabildiği bir çerezle tutulur (`HttpOnly`, `SameSite=Lax`; HTTPS'te `Secure`). Çerezin veritabanında yalnızca SHA-256 özeti durur.
 - **Erişim:**
   - Bir hesabın gökyüzüne yalnızca sahibi erişir; oturum kimliğini bilmek yetmez.
+  - Veritabanına tüm erişim tek bir kilitten geçer; aynı anda gelen isteklerde hesaplar karışmaz. Silinen bir gökyüzü, arka planda çalışan bir ajan işiyle geri gelmez.
   - Hatalı giriş denemeleri sınırlıdır.
   - Yazma istekleri başka bir siteden gelemez (CSRF koruması).
 - **İkizine öğret:**
@@ -161,6 +164,7 @@ python3 -m pytest -q
 Testler şunları kapsar:
 
 - Hesap akışı: kayıt, giriş, çıkış, başkasının gökyüzüne erişememe, CSRF.
+- `test_hatalar.py`: kapsamlı bir taramada bulunan her hatanın regresyon testi (eşzamanlı erişim, eski öneri, tekil görev kimlikleri, model çıktısı ayrıştırma, hız sınırında yeniden deneme…).
 - Ajan akışları ve güvenlik denetimleri.
 - **Gerçek model yolunun uçtan uca testi (anahtar gerekmez):** `test_model_yolu.py`, yerel ve OpenAI uyumlu sahte bir model sunucusu açar.
   - Önce on iki ajanın hepsini gerçek HTTP yolundan geçirir.
