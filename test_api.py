@@ -135,7 +135,8 @@ def test_kaynak_avcisi():
     assert any(e["ajan"] == "Kaynak Avcısı" for e in c.get(f"/v2/sessions/{r['session_id']}/events").json()["olaylar"])
     r2 = c.post("/v2/sessions", json={"hobi": "İspanyolca"}).json()
     k2 = c.get(f"/v2/sessions/{r2['session_id']}").json()["alanlar"][0]["kaynaklar"]
-    assert k2["kaynak_turu"] == "arama" and k2["secim"] is None and k2["arama"][0]["linkler"][0]["url"].startswith("https://www.google.com/search")
+    assert k2["kaynak_turu"] == "platform" and k2["secim"] is None and k2["arama"] == []
+    assert all("google.com" not in p["url"] for p in k2["platformlar"]) and k2["platformlar"][0]["url"].startswith("https://ocw.mit.edu/")
 
 
 def test_ikiz_yalnizca_ogrettiklerini_bilir():
@@ -159,3 +160,54 @@ def test_ikiz_yalnizca_ogrettiklerini_bilir():
     if ex["sonuc"]["star"] != "sonuk":
         assert y["star"] == ex["sonuc"]["star"] and a["ikiz"]["ogretilen"] == 1
         assert next(t for t in a["harita"] if t["id"] == ilk["id"])["done"]
+
+
+def test_sure_secimi_ve_profil():
+    r = c.post("/v2/sessions", json={"akademik": "Veri Yapıları", "dakika": 30, "sure": 14}).json()
+    sid = r["session_id"]
+    v = c.get(f"/v2/sessions/{sid}").json()
+    a = v["alanlar"][0]
+    assert v["profil"]["sure"] == 14 and a["hedef"]["sure"] == 14 and max(t["day"] for t in a["harita"]) == 14
+    ids = [t["id"] for t in a["harita"]]
+    assert len(ids) == len(set(ids))
+    v = c.patch(f"/v2/sessions/{sid}/profile", json={"sure": 30, "dakika": 45, "ad": "Ece", "seviye": "orta"}).json()
+    a = v["alanlar"][0]
+    assert v["profil"]["sure"] == 30 and v["ad"] == "Ece" and a["hedef"]["sure"] == 30 and max(t["day"] for t in a["harita"]) == 30
+    assert len({t["id"] for t in a["harita"]}) == len(a["harita"])
+    assert {d for d in range(1, 31)} <= {t["day"] for t in a["harita"]}
+    assert c.patch(f"/v2/sessions/{sid}/profile", json={"hedef_notu": "Numaram 0532 123 45 67"}).status_code == 422
+    assert c.patch(f"/v2/sessions/{sid}/profile", json={"sure": 3}).status_code == 422
+
+
+def test_yeni_takimyildiz_ve_pratik():
+    sid = yeni()
+    r = c.post(f"/v2/sessions/{sid}/tracks", json={"tur": "akademik", "konu": "Veri Yapıları"}).json()
+    assert r["ok"] and r["alan"] == "akademik-2"
+    v = c.get(f"/v2/sessions/{sid}").json()
+    assert len(v["alanlar"]) == 3 and all(a["hazir"] for a in v["alanlar"])
+    tum = [t["id"] for a in v["alanlar"] for t in a["harita"]]
+    assert len(tum) == len(set(tum))
+    assert c.post(f"/v2/sessions/{sid}/tracks", json={"tur": "hobi", "konu": "gitar"}).status_code == 409
+    p1 = c.post(f"/v2/sessions/{sid}/practice", json={"alan": "hobi", "beceri": "Am ↔ C geçişi", "bpm": 60, "dakika": 10}).json()
+    p2 = c.post(f"/v2/sessions/{sid}/practice", json={"alan": "hobi", "beceri": "Am ↔ C geçişi", "bpm": 68, "dakika": 10}).json()
+    assert p1["ok"] and "60 → 68" in p2["mesaj"]
+    assert len(c.get(f"/v2/sessions/{sid}").json()["alanlar"][1]["pratik"]) == 2
+
+
+def test_ajan_ciktisi_ve_hakem_yonlendirme():
+    r = c.post("/v2/sessions", json={"akademik": "Veri Yapıları"}).json(); sid = r["session_id"]
+    for ajan in ["Kutup Yıldızı", "Haritacı", "Kaynak Avcısı", "Gözcü", "İkiz"]:
+        o = c.get(f"/v2/sessions/{sid}/agents/{ajan}/output").json()
+        assert o["bolumler"] and o["markdown"].startswith(f"# {ajan}")
+    assert c.get(f"/v2/sessions/{sid}/agents/Yok/output").status_code == 404
+    c.post(f"/v2/sessions/{sid}/demo/skip", json={"gun": 4, "tutarlilik": 1.0})
+    a = c.get(f"/v2/sessions/{sid}").json()["alanlar"][0]
+    ilk = next(y for y in a["ikiz"]["yildizlar"] if y["acik"])
+    c.post(f"/v2/sessions/{sid}/teach/add", json={"metin": "Bağlı listede her düğüm bir sonraki düğümü işaret eder. Bağlı listede ekleme her zaman yavaştır."})
+    ex = c.post(f"/v2/sessions/{sid}/teach/exam", json={"gorev_id": ilk["id"]}).json()["sonuc"]
+    gb = ex["geri_bildirim"]
+    assert gb["yonlendirme"] and gb["yonlendirme"][0]["url"].startswith("https://visualgo.net/")
+    assert gb["ozet"]
+    # parlaklık = ikizin başarısı
+    a = c.get(f"/v2/sessions/{sid}").json()["alanlar"][0]
+    assert a["ilerleme"]["parlaklik"] == a["ikiz"]["bilgi_yuzde"]
