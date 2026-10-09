@@ -53,6 +53,14 @@ def _akilli(system: str, payload: dict) -> dict:
     if system == ka._PROMPT:
         SAYAC["Kaynak Avcısı"] += 1
         return {"yaklasim": "Önce temel kavramlar.", "oneriler": [{"baslik": "Ders notları", "tur": "ders", "neden": "Sistemli.", "sorgu": "lecture notes"}]}
+    if system == g.GOZLEMEVI_PROMPT:
+        SAYAC["Gözlemevi"] += 1
+        m = payload["message"].lower()
+        isler = [i for i, k in (("sinav_plani", "vize"), ("mini_sinav", "mini"), ("kaynak", "kaynak"), ("hafiflet", "yoğun")) if k in m]
+        return {"isler": isler, "alan": None, "gerekce": "Görevi okudum ve uygun ajanlara verdim."}
+    if system == g.SOHBET_YONLENDIR_PROMPT:
+        SAYAC["Gözlemevi"] += 1
+        return {"ajan": "Gözcü", "neden": "İlerleme sorusu."}
     if '{"cevap": str}' in system:
         SAYAC["sohbet"] += 1
         return {"cevap": "Planın iyi gidiyor; bugün tek görevini bitir."}
@@ -128,7 +136,7 @@ def test_tum_ajanlar_gercek_model_yolundan_calisir(model):
     olaylar = _tam_akis(c)
     s.shutdown()
     assert [e["mesaj"] for e in olaylar if e["tur"] == "error"] == []
-    assert set(SAYAC) >= {"Astronom", "Kutup Yıldızı", "Haritacı", "Kaynak Avcısı", "Rehber", "Yörüngeci",
+    assert set(SAYAC) >= {"Gözlemevi", "Astronom", "Kutup Yıldızı", "Haritacı", "Kaynak Avcısı", "Rehber", "Yörüngeci",
                           "Kaşif", "İkiz", "Hakem", "Konu Bekçisi", "sohbet"}
     assert SAYAC["bilinmeyen"] == 0
 

@@ -278,3 +278,45 @@ def test_hiz_sinirinda_bekleyip_yeniden_dener(monkeypatch):
     monkeypatch.delenv("LLM_YENIDEN_DENEME", raising=False)
     assert ia.llm_json("sistem", {"soru": "x"}) == {"cevap": "tamam"} and len(istekler) == 2
     s.shutdown()
+
+
+# ---------------------------------------------------------------- ana ajan (Gözlemevi) kararları
+def test_gozlemevi_karari_modelden_gelir_ve_denetlenir(monkeypatch):
+    c = _istemci()
+    sid = c.post("/v2/sessions", json={"akademik": "Veri Yapıları", "hobi": "İspanyolca"}).json()["session_id"]
+    monkeypatch.setattr(ia, "is_mock", lambda: False)
+    cevaplar = {g.GOZLEMEVI_PROMPT: {"isler": ["kaynak", "uydurma_is"], "alan": "hobi", "gerekce": "İspanyolca için kaynak istedin."}}
+    monkeypatch.setattr(ia, "llm_json", lambda system, payload, **k: cevaplar[system] if system in cevaplar else ia._mock(system, payload))
+    r = c.post(f"/v2/sessions/{sid}/assign", json={"metin": "İspanyolca için iyi bir şey bul bana"}).json()
+    assert r["ok"]
+    gorev = store.get(sid)["gorevler"][-1]
+    assert [a["ad"] for a in gorev["atamalar"]] == ["kaynak"] and gorev["alan"] == "hobi" and gorev["karar"] == "model"
+    olay = [e for e in store.get(sid)["olaylar"] if e["ajan"] == "Gözlemevi" and e["tur"] == "decision"][-1]
+    assert "İspanyolca" in olay["mesaj"] and "İspanyolca için kaynak istedin." in olay["mesaj"]
+    assert any(e["ajan"] == "Kaynak Avcısı" and e["alan"] == "hobi" for e in store.get(sid)["olaylar"])
+
+
+def test_gozlemevi_model_yanit_vermezse_kurallara_duser(monkeypatch):
+    c = _istemci()
+    sid = _gokyuzu(c)
+    monkeypatch.setattr(ia, "is_mock", lambda: False)
+
+    def bozuk(system, payload, **k):
+        if system == g.GOZLEMEVI_PROMPT:
+            raise ia.LLMError("HTTP 429")
+        return ia._mock(system, payload)
+    monkeypatch.setattr(ia, "llm_json", bozuk)
+    assert c.post(f"/v2/sessions/{sid}/assign", json={"metin": "Mini sınav hazırla"}).json()["ok"]
+    gorev = store.get(sid)["gorevler"][-1]
+    assert [a["ad"] for a in gorev["atamalar"]] == ["mini_sinav"] and gorev["karar"] == "kural"
+
+
+def test_ajan_basina_model_secimi(monkeypatch):
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    monkeypatch.setenv("LLM_API_KEY", "x")
+    monkeypatch.setenv("LLM_MODEL", "buyuk-model")
+    monkeypatch.setenv("LLM_MODEL_HIZLI", "hizli-model")
+    assert ia.model_name("Haritacı") == ia.model_name("Hakem") == "buyuk-model"
+    assert ia.model_name("Gözlemevi") == ia.model_name("Konu Bekçisi") == ia.model_name("sohbet") == "hizli-model"
+    monkeypatch.delenv("LLM_MODEL_HIZLI")
+    assert ia.model_name("Gözlemevi") == "buyuk-model"                        # hızlı model yazılmadıysa tek model

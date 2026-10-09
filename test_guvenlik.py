@@ -73,7 +73,7 @@ def test_ogret_entegrasyon():
     # 4) ikiz bilgi sızdırırsa (gerçek mod): cevap 'anlatılmadı' olur
     orig_mock, orig_llm = ia.is_mock, ia.llm_json
     ia.is_mock = lambda: False
-    ia.llm_json = lambda sys_, payload: {"answers": [{"question_id": "q1",
+    ia.llm_json = lambda sys_, payload, **_k: {"answers": [{"question_id": "q1",
         "answer": "reset_index fonksiyonu indeksleri yeniden numaralandırır ve tabloyu düzenler.", "cited": [1]}]}
     try:
         ans = oa.ikiz_sinav([oa.ExamQuestion("q1", "?", "r", ["k"])], ["Filtreleme satır seçer."])
