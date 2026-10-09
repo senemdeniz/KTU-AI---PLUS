@@ -98,33 +98,7 @@ export function ikizGogu(yildizlar, w = 640, h = 220, etiket = true) {
   return el;
 }
 
-/** Karşılama: iki takımyıldız sırayla belirir (animasyon). */
-export function ikiliAnimasyon(kap) {
-  const W = 560, H = 560, n = 18;
-  const a = noktalar(n, W, H, 5), b = noktalar(n, W, H, 11).map((q) => ({ x: q.x, y: q.y - 18 }));
-  const kok = svg('svg', { viewBox: `0 0 ${W} ${H}`, 'aria-hidden': 'true' });
-  kap.append(kok);
-  const ciz = (ilerle) => {
-    kok.replaceChildren();
-    const kat = (pts, renk, halka, dash) => {
-      const m = Math.floor(ilerle * pts.length);
-      if (m > 1) kok.append(svg('path', { d: pts.slice(0, m).map((q, i) => `${i ? 'L' : 'M'}${q.x.toFixed(1)} ${q.y.toFixed(1)}`).join(' '), stroke: renk, 'stroke-width': 1.6, fill: 'none', 'stroke-dasharray': dash || 'none', opacity: 0.85 }));
-      pts.slice(0, m).forEach((q, i) => kok.append(halka ? svg('circle', { cx: q.x, cy: q.y, r: 3.5, fill: 'none', stroke: renk, 'stroke-width': 1.2, 'stroke-opacity': .7 }) : svg('circle', { cx: q.x, cy: q.y, r: i === m - 1 ? 7 : 4.5, fill: renk })));
-    };
-    kat(b, '#c9d0f5', true, '3 6'); kat(a, '#f5d78e', false);
-  };
-  if (azalt) { ciz(1); return; }
-  let t0 = null;
-  const adim = (t) => {
-    t0 ??= t;
-    const ilerle = Math.min(((t - t0) / 5200), 1);
-    ciz(ilerle);
-    if (ilerle < 1) requestAnimationFrame(adim);
-  };
-  requestAnimationFrame(adim);
-}
-
-/** Sen ve rota eğrisi. */
+/** İlerleme eğrisi: senin yaktığın yıldızlar (altın) ve rota (kesikli). */
 export function egri(sen, ikiz, w = 760, h = 300) {
   const max = Math.max(...ikiz, 1), n = Math.max(ikiz.length - 1, 1), pad = 28;
   const nk = (a) => a.map((v, i) => `${i ? 'L' : 'M'}${(pad + (i / n) * (w - 2 * pad)).toFixed(1)} ${(h - pad - (v / max) * (h - 2 * pad)).toFixed(1)}`).join(' ');

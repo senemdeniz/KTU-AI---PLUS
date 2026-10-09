@@ -1,4 +1,4 @@
-import { arkaplan, takimyildiz, ikizGogu, ikiliAnimasyon, egri, svg, avatarCiz, AVATAR_BICIM } from './sky.js';
+import { arkaplan, takimyildiz, ikizGogu, egri, svg, avatarCiz, AVATAR_BICIM } from './sky.js';
 
 const _rc = Element.prototype.replaceChildren;
 Element.prototype.replaceChildren = function (...k) { return _rc.apply(this, k.flat().filter((x) => x != null && x !== false)); };
@@ -21,16 +21,13 @@ export const h = (tag, a = {}, ...kids) => {
 };
 const kisa = (s, n) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
 const guvenliUrl = (u) => (typeof u === 'string' && /^https:\/\//.test(u) ? u : '#');
-const depo = {
-  oku: () => { try { return localStorage.getItem('ikiz.sid'); } catch { return null; } },
-  yaz: (v) => { try { v ? localStorage.setItem('ikiz.sid', v) : localStorage.removeItem('ikiz.sid'); } catch { /* özel pencere */ } },
-};
 let toastT;
 const bildir = (m) => { const t = $('#toast'); t.textContent = m; t.classList.add('goster'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('goster'), 3400); };
 
 async function api(yol, yontem = 'GET', govde) {
   let r;
-  try { r = await fetch(yol, { method: yontem, headers: govde ? { 'Content-Type': 'application/json' } : undefined, body: govde ? JSON.stringify(govde) : undefined }); }
+  const basliklar = { 'X-Ikiz': '1', ...(govde ? { 'Content-Type': 'application/json' } : {}) };
+  try { r = await fetch(yol, { method: yontem, headers: basliklar, credentials: 'same-origin', body: govde ? JSON.stringify(govde) : undefined }); }
   catch { throw new Error('Sunucuya ulaşılamıyor. Sunucunun açık olduğundan emin ol.'); }
   if (!r.ok) {
     let m = r.status === 429 ? 'Çok fazla istek gönderdin. Biraz bekle.' : `Beklenmeyen hata (${r.status}).`;
@@ -59,7 +56,7 @@ function balon(o, yeni = false) {
 const yaziyor = () => h('div', { class: 'yaziyor', 'aria-label': 'Yazıyor' }, h('i'), h('i'), h('i'));
 
 /* ---------- durum ---------- */
-const S = { sid: null, view: null, olaylar: [], son: 0, ekran: 'karsilama', sekme: 'gokyuzu', alan: 0, zamanlayici: null, ses: false, mesgul: false };
+const S = { kullanici: null, sid: null, view: null, olaylar: [], son: 0, ekran: 'karsilama', sekme: 'gokyuzu', alan: 0, zamanlayici: null, ses: false, mesgul: false };
 const kok = () => $('#ana');
 const goster = (ekran, ...icerik) => { S.ekran = ekran; kok().replaceChildren(...icerik); scrollTo(0, 0); kok().focus({ preventScroll: true }); };
 
@@ -71,7 +68,7 @@ async function tazele() {
     if (o.olaylar.length) { S.son = o.olaylar.at(-1).id; S.olaylar.push(...o.olaylar); S.yeniOlay = true; }
     return true;
   } catch (e) {
-    if (/bulunamad/.test(e.message)) { depo.yaz(null); S.sid = null; location.reload(); }
+    if (/bulunamad/.test(e.message)) { S.sid = null; location.reload(); }
     return false;
   }
 }
@@ -79,37 +76,69 @@ const SVG_YILDIZ = () => svg('svg', { viewBox: '0 0 24 24', width: 22, height: 2
 const marka = () => h('span', { class: 'marka' }, SVG_YILDIZ(), 'İkiz');
 const logoDugmesi = () => h('button', { class: 'marka logo-dugme', 'aria-label': 'İkiz: tüm takımyıldızların', title: 'Tüm takımyıldızların', onclick: () => sekmeGit('takimlar') }, SVG_YILDIZ(), 'İkiz');
 
-/* ---------- 0 · karşılama ---------- */
-function karsilama() {
+/* ---------- 0 · karşılama: tek cümle, kayıt ve giriş ---------- */
+function hesapFormu(baslangic = 'kayit', onDoldur = '') {
+  let mod = baslangic;
+  const kullanici = h('input', { class: 'girdi', id: 'h-kullanici', autocomplete: 'username', maxlength: 24, required: true, autocapitalize: 'none', spellcheck: 'false', value: onDoldur });
+  const sifre = h('input', { class: 'girdi', id: 'h-sifre', type: 'password', maxlength: 128, required: true });
+  const sifre2 = h('input', { class: 'girdi', id: 'h-sifre2', type: 'password', maxlength: 128 });
+  const tekrarGrup = h('div', { class: 'grup' }, h('label', { class: 'etiket', for: 'h-sifre2' }, 'Şifre (tekrar)'), sifre2);
+  const ipucu = h('p', { class: 'kucuk sis2' });
+  const hata = h('p', { class: 'hata-satir', role: 'alert' });
+  const gonder = h('button', { class: 'dugme', type: 'submit' });
+  const sekmeler = [['kayit', 'Kayıt ol'], ['giris', 'Giriş yap']].map(([k, ad]) => h('button', { type: 'button', class: 'sekme', role: 'tab', onclick: () => { mod = k; ciz(); } }, ad));
+  const ciz = () => {
+    sekmeler.forEach((b, i) => b.setAttribute('aria-selected', String(['kayit', 'giris'][i] === mod)));
+    tekrarGrup.hidden = mod !== 'kayit';
+    sifre.autocomplete = mod === 'kayit' ? 'new-password' : 'current-password';
+    sifre2.autocomplete = 'new-password';
+    ipucu.textContent = mod === 'kayit' ? 'Kullanıcı adı: küçük harf, rakam, nokta ya da alt çizgi. Şifre: en az 8 karakter, harf ve rakam.' : '';
+    gonder.textContent = mod === 'kayit' ? 'Kayıt ol ve ikizimi oluştur' : 'Giriş yap';
+    hata.textContent = '';
+  };
+  const form = h('form', { class: 'hesap-kart', novalidate: true, onsubmit: async (e) => {
+    e.preventDefault(); hata.textContent = '';
+    const k = kullanici.value.trim().toLowerCase();
+    if (!k || !sifre.value) { hata.textContent = 'Kullanıcı adını ve şifreni yaz.'; return; }
+    if (mod === 'kayit' && sifre.value !== sifre2.value) { hata.textContent = 'Şifreler aynı değil.'; return; }
+    gonder.disabled = true;
+    try {
+      const r = await api(`/v2/auth/${mod === 'kayit' ? 'register' : 'login'}`, 'POST', { kullanici: k, sifre: sifre.value });
+      S.kullanici = r.kullanici; S.sid = r.session_id;
+      if (S.sid) devam(); else profil();
+    } catch (err) { hata.textContent = err.message; gonder.disabled = false; }
+  } },
+    h('div', { class: 'sekmeler', role: 'tablist' }, sekmeler),
+    h('div', { class: 'grup' }, h('label', { class: 'etiket', for: 'h-kullanici' }, 'Kullanıcı adı'), kullanici),
+    h('div', { class: 'grup' }, h('label', { class: 'etiket', for: 'h-sifre' }, 'Şifre'), sifre),
+    tekrarGrup, ipucu, hata, gonder);
+  ciz();
+  return form;
+}
+function karsilama(mod = 'kayit', onDoldur = '') {
   const kap = h('div', { class: 'ikili' });
-  const sayfa = h('div', { class: 'sayfa' },
+  goster('karsilama', h('div', { class: 'sayfa' },
     h('header', { class: 'ust' }, marka(), h('span', { class: 'rozet', id: 'model-rozet' }, h('i'), 'Bağlanıyor…')),
     h('section', { class: 'karsilama' },
       h('div', {},
-        h('h1', {}, 'Gökyüzünde yalnız değilsin.'),
-        h('p', { class: 'alt' }, 'Ne öğrenmek istediğini yaz. Bir ajan ekibi sana rota çizer, kaynak bulur ve ilerlemeni izler. Öğrendiğini ikizine anlatırsın; ikizin yalnızca senin öğrettiklerinle büyür.'),
-        h('div', { class: 'eylem' },
-          h('button', { class: 'dugme', onclick: profil }, 'İkizini oluştur'),
-          h('button', { class: 'dugme ince', onclick: () => canliDemo() }, 'Canlı demoyu izle')),
-        S.sid ? null : anahtarFormu(),
-        h('div', { class: 'ipucu-satiri' },
-          h('span', {}, h('i', { class: 'nokta-altin' }), 'Sen: bitirdiğin her görev bir yıldız'),
-          h('span', {}, h('i', { class: 'nokta-rota' }), 'Rota: planı aksatmasaydın olacağın yer'),
-          h('span', {}, h('i', { class: 'nokta-mavi' }), 'İkizin: yalnızca ona öğrettiklerini bilir'))),
-      kap));
-  goster('karsilama', sayfa);
-  if (S.sid) {
-    tazele().then((ok) => {
-      if (!ok || !S.view || S.ekran !== 'karsilama') { ikiliAnimasyon(kap); return; }
-      kap.replaceChildren(h('div', { class: 'donus' }, h('p', { class: 'sis' }, `${S.view.ad}, gökyüzün seni bekliyor`),
-        ...S.view.alanlar.filter((a) => a.hazir).map((a) => h('div', { class: 'donus-kart' }, takimyildiz({ sen: a.ilerleme.sen_yildiz, rota: a.ilerleme.rota_yildiz, toplam: a.ilerleme.toplam_yildiz, w: 420, h: 170, etiket: false }),
-          h('b', {}, a.konu), h('span', { class: 'kucuk sis' }, `${a.ilerleme.sen_yildiz}/${a.ilerleme.toplam_yildiz} yıldız · ${ikizAdi(a)} %${a.ikiz.bilgi_yuzde}`)))));
-    });
-  } else ikiliAnimasyon(kap);
+        h('h1', {}, 'Bir ajan ekibi yolunu çizer; sen öğrendiğini ikizine öğretirsin.'),
+        hesapFormu(mod, onDoldur),
+        h('button', { class: 'baglanti demo-link', onclick: () => canliDemo() }, 'Kayıt olmadan canlı demoyu izle')),
+      kap)));
+  kap.replaceChildren(h('div', { class: 'karsilama-ikili', 'aria-hidden': 'true' },
+    h('figure', { class: 'k-sen' }, avatarCiz(2, { yanik: 0.78, boyut: 220, etiket: 'Sen' }), h('figcaption', {}, 'Sen')),
+    h('span', { class: 'k-bag' }),
+    h('figure', { class: 'k-ikiz' }, avatarCiz(2, { renk: '#8ea2ff', yanik: 0.45, ayna: true, halka: true, boyut: 220, etiket: 'İkizin' }), h('figcaption', {}, 'İkizin'))));
+  modelRozeti();
+  (onDoldur ? $('#h-sifre') : $('#h-kullanici'))?.focus();
+}
+function modelRozeti() {
   api('/health').then((d) => {
+    S.yetenek = d.yetenekler || {};
     const r = $('#model-rozet'); if (!r) return;
     r.classList.toggle('canli', !d.demo);
-    r.replaceChildren(h('i'), d.demo ? 'Demo modu: ajanlar hazır içerikle çalışır' : `Canlı model: ${d.model}`);
+    r.replaceChildren(h('i'), d.demo ? 'Demo modu' : `Canlı model: ${d.model}`);
+    r.title = d.demo ? 'Model anahtarı tanımlı değil: ajanlar hazır içerikle çalışır. Kurulum için README’ye bak.' : 'Ajanlar gerçek dil modeliyle çalışıyor.';
   }).catch(() => { const r = $('#model-rozet'); if (r) r.replaceChildren(h('i'), 'Sunucuya ulaşılamıyor'); });
 }
 
@@ -117,7 +146,7 @@ function karsilama() {
 const ORNEKLER = [['Veri Yapıları', 'akademik'], ['Kalkülüs I · Türev', 'akademik'], ['Gitar', 'hobi'], ['İspanyolca', 'hobi']];
 function profil() {
   const sec = (ad, deger, etiket, secili) => h('label', { class: 'secenek' }, h('input', { type: 'radio', name: ad, value: deger, checked: secili }), h('span', {}, etiket));
-  const ad = h('input', { class: 'girdi', id: 'p-ad', autocomplete: 'given-name', maxlength: 40, required: true, placeholder: 'Adın', value: 'Elif' });
+  const ad = h('input', { class: 'girdi', id: 'p-ad', autocomplete: 'given-name', maxlength: 40, required: true, placeholder: 'Adın' });
   const konu = h('input', { class: 'girdi', id: 'p-konu', maxlength: 80, required: true, placeholder: 'Örn. Veri Yapıları', autocomplete: 'off' });
   const tarih = h('input', { class: 'girdi', id: 'p-tarih', type: 'date' });
   const not_ = h('textarea', { class: 'girdi', id: 'p-not', maxlength: 200, placeholder: 'Örn. Staj mülakatlarına hazırlanıyorum. (Ad, telefon, e-posta gibi kişisel bilgi yazma.)' });
@@ -149,8 +178,11 @@ function profil() {
         dakika: Number(secimi('dk')), zaman: secimi('zaman'), seviye: secimi('seviye'), hedef_notu: not_.value.trim(), sure: Number(secimi('sure')), avatar,
         son_tarihler: alan === 'akademik' && tarih.value ? [{ baslik: 'Sınav / teslim', tarih: tarih.value }] : [],
       });
-      S.sid = r.session_id; depo.yaz(S.sid); S.olaylar = []; S.son = 0; S.view = null; kurulum();
-    } catch (err) { hata.textContent = err.message; hata.hidden = false; dugme.disabled = false; dugme.textContent = 'İkizimi oluştur'; }
+      S.sid = r.session_id; S.olaylar = []; S.son = 0; S.view = null; kurulum();
+    } catch (err) {
+      if (/giriş yap/.test(err.message)) { karsilama('giris'); bildir(err.message); return; }
+      if (/Zaten bir gökyüzün/.test(err.message)) { await baslat(); return; }
+      hata.textContent = err.message; hata.hidden = false; dugme.disabled = false; dugme.textContent = 'İkizimi oluştur'; }
   } },
     h('div', { class: 'grup' }, h('label', { class: 'etiket', for: 'p-ad' }, 'Sana nasıl seslenelim?'), ad),
     h('fieldset', { class: 'grup' }, h('legend', {}, 'Gökyüzünde seni hangi takımyıldız temsil etsin?'),
@@ -208,6 +240,16 @@ function kurulum() {
   dongu();
 }
 
+/* ---------- Ajan bilgi kartları: her ajanın ne işe yaradığı ---------- */
+const TUR_ADI = { llm: 'Yapay zekâ', kod: 'Kural tabanlı', 'llm+kod': 'Yapay zekâ + kural' };
+function ajanKartlari(ajanlar, onSec = null) {
+  return h('div', { class: 'ajan-kartlar' }, ajanlar.map((a) => h(onSec ? 'button' : 'article', { class: 'ajan-kart', style: `--c:${ajanRenk(a.ad)}`, ...(onSec ? { type: 'button', onclick: () => onSec(a.ad) } : {}) },
+    h('span', { class: 'ic' },
+      h('span', { class: 'ajan-kart-bas' }, avatar(a.ad), h('span', {}, h('b', {}, a.ad), h('span', { class: 'ajan-rol' }, a.rol))),
+      h('span', { class: 'ajan-fayda' }, a.fayda),
+      h('span', { class: 'ajan-alt' }, h('span', {}, a.ne_zaman), h('span', { class: 'ajan-tur' }, TUR_ADI[a.tur] || ''))))));
+}
+
 /* ---------- 3 · ekibin neler yapabileceği ---------- */
 function ikon(...yollar) { return svg('svg', { viewBox: '0 0 160 96', 'aria-hidden': 'true' }, ...yollar); }
 function tanitim() {
@@ -227,6 +269,8 @@ function tanitim() {
     h('section', { class: 'tanitim' },
       h('h2', {}, 'Ekibin seni bu yolda bırakmaz.'),
       h('div', { class: 'slaytlar' }, slaytlar.map(([b, a, i]) => h('article', { class: 'slayt' }, i, h('h3', {}, b), h('p', {}, a)))),
+      S.view?.ajanlar ? h('div', { class: 'tanitim-ekip' }, h('h3', {}, `Ekibin: ${S.view.ajanlar.length} ajan, her birinin tek bir işi var`),
+        ajanKartlari(S.view.ajanlar)) : null,
       h('div', {}, h('button', { class: 'dugme', onclick: uygulama }, 'Gökyüzüne gir')))));
 }
 
@@ -248,9 +292,7 @@ const IKON = {
 };
 const SEKMELER = [['gokyuzu', 'Gökyüzü'], ['harita', 'Yol haritası'], ['bugun', 'Bugün'], ['ekip', 'Ekip'], ['ikiz', 'İkizin'], ['ogret', 'İkizine öğret'], ['profil', 'Profil']];
 const ikonSvg = (k) => svg('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' }, svg('path', { d: IKON[k] }));
-const alanAdi = (a) => (a.alan.startsWith('akademik') ? 'Akademik' : 'Hobi');
 const aktifAlan = () => S.view?.alanlar[Math.min(S.alan, S.view.alanlar.length - 1)];
-const mevcutGun = (v) => v.gun;
 
 function alanSecici(onSec) {
   const v = S.view;
@@ -274,7 +316,7 @@ function uygulama() {
     h('nav', { class: 'mobil-nav', 'aria-label': 'Ana gezinme' }, navDugmeleri(true)));
   goster('uygulama', kabuk);
   kullaniciCipi();
-  api('/health').then((d) => { S.yetenek = d.yetenekler || {}; const r = $('#model-rozet'); if (r) { r.classList.toggle('canli', !d.demo); r.replaceChildren(h('i'), d.demo ? 'Demo modu' : `Canlı: ${d.model}`); } }).catch(() => {});
+  modelRozeti();
   S.panolar = {}; S.aktifPano = null;
   sekmeGit(S.sekme || 'gokyuzu');
   const dongu = async () => {
@@ -388,7 +430,7 @@ function kaynakKarti(k, ana = false, kontrol = null) {
   const baslik = ana ? h('h3', {}, k.baslik) : h('h4', {}, k.baslik);
   const link = h('a', { class: ana ? 'dugme kucuk git' : '', href: guvenliUrl(k.url), target: '_blank', rel: 'noopener noreferrer' }, ana ? 'Bu kaynakla başla' : 'Kaynağı aç');
   return h('article', { class: ana ? 'kaynak-ana' : 'kaynak' }, etiketler, baslik, guvenSatiri(k, kontrol), h('p', { class: ana ? '' : 'kucuk sis' }, k.gerekce),
-    h('p', { class: 'kucuk sis2' }, `Elle doğrulandı: ${k.dogrulama || ''}`), h('div', {}, link));
+    h('div', {}, link));
 }
 const SINIF_IKON = { dil: 'Aa', teknik: '{ }', akademik: 'Σ', beceri: '♪' };
 function stratejiKutusu(k) {
@@ -537,7 +579,6 @@ function haritaPano() {
           h('div', { class: 'sag-eylem' },
             dugme(kontrolEdiliyor ? 'Kontrol ediliyor…' : 'Bağlantıları şimdi kontrol et', () => kontrolEt(a.alan), 'ince kucuk'),
             dugme('Yeniden tara', () => yap(() => api(`/v2/sessions/${S.sid}/assign`, 'POST', { metin: 'Kaynak öner' }), 'Kaynak Avcısı yeniden tarıyor'), 'ince kucuk'))),
-        a.kaynak_kontrol ? h('p', { class: 'kucuk sis2' }, `Son bağlantı kontrolü: ${a.kaynak_kontrol.zaman.replace('T', ' ')}`) : null,
         birincil ? h('div', { class: 'kaynak-ana' }, h('h3', {}, birincil.baslik), guvenSatiri(birincil, a.kaynak_kontrol),
           birincil.url ? h('div', {}, h('a', { class: 'dugme kucuk git', href: guvenliUrl(birincil.url), target: '_blank', rel: 'noopener noreferrer' }, 'Bu kaynakla başla')) : null,
           h('p', { class: 'kucuk sis2' }, 'Kaynak Avcısı’nın önerisi aşağıda duruyor.')) : null,
@@ -672,11 +713,6 @@ function adimSeridi(onSec) {
   return h('div', { class: 'adim-serit', 'aria-label': 'Son adımlar' }, son.map((o, i) => h('button', { class: 'adim' + (i === son.length - 1 ? ' son' : ''), style: `--c:${ajanRenk(o.ajan)}`, onclick: () => onSec(o.ajan), title: o.mesaj },
     h('span', { class: 'ic' }, avatar(o.ajan), h('span', { class: 'adim-ad' }, o.ajan), h('span', { class: 'adim-zaman' }, onceSure(o.t)), h('span', { class: 'adim-metin' }, kisa(o.mesaj, 70))))));
 }
-function indir(ad, metin) {
-  const url = URL.createObjectURL(new Blob([metin], { type: 'text/markdown;charset=utf-8' }));
-  const a = h('a', { href: url, download: `ikiz-${ad.toLocaleLowerCase('tr').replace(/[^a-z0-9ğüşıöç]+/g, '-')}.md` });
-  document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000);
-}
 function ekipPano() {
   let secili = 'Gözlemevi', cikti = null, ciktiSayi = -1, yukleniyor = false;
   const haritaKap = h('div', {}), ciktiKap = h('aside', { class: 'cikti', 'aria-live': 'polite' }), simdi = h('div', { class: 'simdi' });
@@ -710,22 +746,23 @@ function ekipPano() {
     if (!o) { ciktiKap.replaceChildren(h('p', { class: 'sis' }, yukleniyor ? 'Çıktı getiriliyor…' : 'Bir ajana dokun.')); return; }
     ciktiKap.replaceChildren(
       h('div', { class: 'cikti-bas' }, avatar(o.ajan), h('div', {}, h('h3', {}, o.ajan), h('p', { class: 'kucuk sis' }, o.rol))),
-      h('div', { class: 'sag-eylem' },
-        dugme('Kopyala', async () => { try { await navigator.clipboard.writeText(o.markdown); bildir('Çıktı kopyalandı'); } catch { bildir('Kopyalanamadı; İndir’i kullan'); } }, 'ince kucuk'),
-        dugme('İndir (.md)', () => indir(o.ajan, o.markdown), 'ince kucuk')),
+      o.fayda ? h('p', { class: 'cikti-fayda' }, o.fayda) : null,
       ...(o.bolumler.length ? o.bolumler.map((b) => h('section', { class: 'cikti-bolum' }, h('h4', {}, b.baslik),
-        h('ul', {}, b.satirlar.map((s) => h('li', {}, /^https:\/\//.test(s) ? h('a', { href: guvenliUrl(s), target: '_blank', rel: 'noopener noreferrer' }, s) : s)))))
+        h('ul', {}, b.satirlar.map((x) => h('li', {}, typeof x === 'object' ? h('a', { href: guvenliUrl(x.url), target: '_blank', rel: 'noopener noreferrer' }, x.metin) : x)))))
         : [h('p', { class: 'sis' }, 'Bu ajan henüz bir şey üretmedi.')]));
   };
   const ciktiGetir = async (ad) => {
     secili = ad; yukleniyor = true; ciktiCiz();
-    try { cikti = await api(`/v2/sessions/${S.sid}/agents/${encodeURIComponent(ad)}/output`); } catch (e) { bildir(e.message); cikti = { ajan: ad, rol: '', bolumler: [], markdown: '' }; }
+    try { cikti = await api(`/v2/sessions/${S.sid}/agents/${encodeURIComponent(ad)}/output`); } catch (e) { bildir(e.message); cikti = { ajan: ad, rol: '', bolumler: [] }; }
     yukleniyor = false; ciktiCiz(); S.aktifPano?.guncelle(S.view);
   };
-  const seritKap = h('div', {});
-  const el = h('div', {}, baslikSatiri('Ekip', 'Ajanların ne yaptığını canlı izle; birine dokun, ürettiğini anında al.'), simdi,
+  const seritKap = h('div', {}), kartKap = h('div', {});
+  let kartlarCizildi = false;
+  const el = h('div', {}, baslikSatiri('Ekip', 'Ajanların ne yaptığını canlı izle; birine dokun, ne ürettiğini gör.'), simdi,
     h('div', { class: 'zihin-yerlesim' }, haritaKap, ciktiKap),
     h('h3', { class: 'ara-baslik', style: 'margin-top:28px' }, 'Son adımlar'), seritKap,
+    h('section', { class: 'bolum' }, h('h3', { class: 'ara-baslik' }, 'Ekibini tanı: kim ne işe yarar?'),
+      h('p', { class: 'sis kucuk', style: 'margin:-4px 0 14px' }, 'Bir karta dokun; o ajanın senin için ürettiği yukarıda açılır.'), kartKap),
     h('div', { class: 'ekip-yerlesim', style: 'margin-top:34px' },
       h('div', {}, h('h3', { class: 'ara-baslik' }, 'Akış'), oneriKap, gorevKap, akis),
       h('div', {}, h('h3', { class: 'ara-baslik' }, 'Ekibe görev ver'), sohbetKap, komut)));
@@ -740,6 +777,7 @@ function ekipPano() {
       : h('span', { class: 'sis' }, h('i', { class: 'canli-nokta bos' }), 'Ekip hazır, seni bekliyor. Bir görev ver ya da bir ajana dokun.'));
     haritaKap.replaceChildren(zihinHaritasi(v, aktif, sonOlay?.mesaj, secili, ciktiGetir));
     seritKap.replaceChildren(adimSeridi(ciktiGetir));
+    if (!kartlarCizildi) { kartlarCizildi = true; kartKap.replaceChildren(ajanKartlari(v.ajanlar, (ad) => { ciktiGetir(ad); scrollTo({ top: 0, behavior: 'smooth' }); })); }
     if (!cikti && !yukleniyor) ciktiGetir(secili);
     else if (S.olaylar.length !== ciktiSayi && S.olaylar.slice(ciktiSayi < 0 ? 0 : ciktiSayi).some((o) => o.ajan === secili)) { ciktiSayi = S.olaylar.length; ciktiGetir(secili); }
     if (ciktiSayi < 0) ciktiSayi = S.olaylar.length;
@@ -757,7 +795,7 @@ function ekipPano() {
       : balon({ ajan: m.ajan, mesaj: m.metin, tur: 'chat' }))));
     if (S.olaylar.length !== sonSayi) {
       sonSayi = S.olaylar.length;
-      akis.replaceChildren(...(calisiyor && sonOlay ? [yaziyor()] : []), ...S.olaylar.slice(-40).reverse().map((o, i) => balon(o, i === 0 && S.yeniOlay)));
+      akis.replaceChildren(...(calisiyor && sonOlay ? [yaziyor()] : []), ...S.olaylar.slice(-12).reverse().map((o, i) => balon(o, i === 0 && S.yeniOlay)));
     }
   };
   return { el, guncelle };
@@ -1069,13 +1107,14 @@ function ayarPano() {
     h('section', { class: 'ayar-grup' }, h('h3', {}, 'Sınırlar'), h('ul', {},
       h('li', {}, 'Kurallar ilk savunma hattıdır; üretimde bir moderasyon modeliyle desteklenmelidir.'),
       h('li', {}, 'Sesli anlatımda tarayıcının ses tanıma servisi sesini kendi sunucusunda işleyebilir.'),
-      h('li', {}, 'Doğrulanmamış konularda kaynak bağlantısı uydurulmaz; yalnızca arama bağlantısı verilir.'))),
-    h('section', { class: 'ayar-grup' }, h('h3', {}, 'Verilerim'), h('p', { class: 'sis' }, 'Oturumunu, planını, ikizini ve anlattığın her şeyi sunucudan kalıcı olarak siler.'),
-      h('div', { class: 'sag-eylem' }, h('button', { class: 'dugme mercan', onclick: async () => {
-        if (!confirm('Tüm verilerin kalıcı olarak silinecek. Emin misin?')) return;
-        try { await api(`/v2/sessions/${S.sid}`, 'DELETE'); } catch (e) { bildir(e.message); return; }
-        depo.yaz(null); S.sid = null; S.view = null; S.olaylar = []; S.son = 0; S.panolar = {}; S.sekme = 'gokyuzu'; bildir('Verilerin silindi'); karsilama();
-      } }, 'Verilerimi sil'))));
+      h('li', {}, 'Doğrulanmış listesi olmayan konularda kaynak bağlantısı uydurulmaz; güvenilir platformların konu sayfasına yönlendirilir.'))),
+    h('section', { class: 'ayar-grup' }, h('h3', {}, 'Hesabın'),
+      h('p', { class: 'sis' }, v.profil.kullanici ? `Kullanıcı adın: ${v.profil.kullanici}. Şifren sunucuda düz metin olarak değil, tuzlanmış bir özet olarak saklanır; giriş bilgisi tarayıcıda yalnızca sunucunun okuyabildiği bir çerezde durur.` : 'Bu bir demo gökyüzü; bir hesaba bağlı değil ve bir gün sonra silinir.'),
+      v.profil.kullanici ? h('div', { class: 'sag-eylem' }, h('button', { class: 'dugme mercan', onclick: async () => {
+        if (!confirm('Hesabın, takımyıldızların, ikizlerin ve anlattığın her şey kalıcı olarak silinecek. Emin misin?')) return;
+        try { await api('/v2/auth/account', 'DELETE'); } catch (e) { bildir(e.message); return; }
+        durumuSifirla(); karsilama(); bildir('Hesabın ve tüm verilerin silindi');
+      } }, 'Hesabımı ve verilerimi sil')) : null));
   return { el, guncelle };
 }
 
@@ -1106,43 +1145,17 @@ function takimlarPano() {
   return { el, guncelle };
 }
 
-/* ---------- Çıkış ve anahtarla devam ---------- */
-function cikis() {
+/* ---------- Çıkış ---------- */
+function durumuSifirla() {
   clearTimeout(S.zamanlayici);
-  const anahtar = S.sid;
-  const view = S.view;
-  depo.yaz(null);
-  S.sid = null; S.view = null; S.olaylar = []; S.son = 0; S.panolar = {}; S.sekme = 'gokyuzu';
-  const kod = h('code', { class: 'anahtar' }, anahtar || '');
-  goster('cikis', h('div', { class: 'sayfa' },
-    h('header', { class: 'ust' }, marka()),
-    h('section', { class: 'cikis' },
-      h('div', {},
-        h('h1', { class: 'cikis-baslik' }, 'Gökyüzün kaydedildi.'),
-        h('p', { class: 'alt sis' }, `${view?.ad ? view.ad + ', ' : ''}bu cihazdan çıktın. Takımyıldızların, ikizin ve planın sunucuda duruyor; geri döndüğünde kaldığın yerden devam edersin.`),
-        anahtar ? h('div', { class: 'anahtar-kutu' },
-          h('b', {}, 'Devam anahtarın'),
-          h('p', { class: 'kucuk sis' }, 'Bu cihaz seni artık hatırlamıyor. Geri dönmek için bu anahtarı kullan. Bir şifre gibi sakla, kimseyle paylaşma.'),
-          kod,
-          h('div', { class: 'sag-eylem' },
-            dugme('Anahtarı kopyala', async () => { try { await navigator.clipboard.writeText(anahtar); bildir('Anahtar kopyalandı'); } catch { bildir('Kopyalanamadı; elle seç'); } }, 'ince kucuk'),
-            dugme('Gökyüzüme geri dön', () => { S.sid = anahtar; depo.yaz(anahtar); devam(); }, 'kucuk'))) : null,
-        h('div', { class: 'sag-eylem', style: 'margin-top:26px' },
-          dugme('Başka bir profille başla', profil, 'ince'),
-          dugme('Ana sayfa', karsilama, 'ince')),
-        view?.alanlar?.length ? h('div', { class: 'cikis-ozet' }, view.alanlar.filter((a) => a.hazir).map((a) => h('div', { class: 'donus-kart' },
-          takimyildiz({ sen: a.ilerleme.sen_yildiz, rota: a.ilerleme.rota_yildiz, toplam: a.ilerleme.toplam_yildiz, w: 420, h: 150, etiket: false }),
-          h('b', {}, a.konu), h('span', { class: 'kucuk sis' }, `${a.ilerleme.sen_yildiz}/${a.ilerleme.toplam_yildiz} yıldız · ${ikizAdi(a)} %${a.ikiz.bilgi_yuzde}`)))) : null))));
+  Object.assign(S, { kullanici: null, sid: null, view: null, olaylar: [], son: 0, panolar: {}, aktifPano: null, sekme: 'gokyuzu', alan: 0 });
 }
-function anahtarFormu() {
-  const girdi = h('input', { class: 'girdi', id: 'anahtar', maxlength: 32, placeholder: 'Devam anahtarın (32 karakter)', autocomplete: 'off', spellcheck: 'false', style: 'max-width:360px' });
-  const hata = h('p', { class: 'kucuk', style: 'color:var(--mercan)', role: 'alert' });
-  return h('details', { class: 'anahtar-form' }, h('summary', {}, 'Devam anahtarım var'),
-    h('form', { onsubmit: async (e) => {
-      e.preventDefault(); const k = girdi.value.trim().toLowerCase(); hata.textContent = '';
-      if (!/^[0-9a-f]{32}$/.test(k)) { hata.textContent = 'Anahtar 32 karakterlik bir koddur (0–9, a–f).'; return; }
-      try { await api(`/v2/sessions/${k}`); S.sid = k; depo.yaz(k); devam(); } catch { hata.textContent = 'Bu anahtarla bir gökyüzü bulunamadı.'; }
-    } }, h('label', { class: 'gizli', for: 'anahtar' }, 'Devam anahtarı'), h('div', { class: 'secenekler' }, girdi, h('button', { class: 'dugme kucuk', type: 'submit' }, 'Devam et')), hata));
+async function cikis() {
+  const k = S.kullanici;
+  try { await api('/v2/auth/logout', 'POST'); } catch { /* çerez zaten geçersiz olabilir */ }
+  durumuSifirla();
+  karsilama('giris', k || '');
+  bildir('Çıkış yaptın. Gökyüzün hesabında seni bekliyor.');
 }
 
 /* ---------- Canlı demo: öğretme akışını kendi kendine oynatır (gerçek API çağrılarıyla) ---------- */
@@ -1170,12 +1183,11 @@ async function sonucBekle(kosul, sure = 15000) { const t0 = Date.now(); while (D
 async function canliDemo() {
   if (S.demoCalisiyor) return;
   S.demoCalisiyor = true; S.demoDur = false; S.demo = true;
-  const onceki = S.sid; if (onceki) { try { localStorage.setItem('ikiz.onceki', onceki); } catch { /* yok */ } }
   const N = 9;
   try {
     demoAnlat(1, N, 'Demo için Elif adında yeni bir öğrenci oluşturuyoruz: Veri Yapıları, 14 gün, günde 30 dakika. Ekip şimdi kuruluyor.');
-    const r = await api('/v2/sessions', 'POST', { ad: 'Elif', akademik: 'Veri Yapıları', hobi: null, dakika: 30, zaman: 'aksam', seviye: 'baslangic', sure: 14, son_tarihler: [] });
-    S.sid = r.session_id; depo.yaz(S.sid); S.olaylar = []; S.son = 0; S.view = null; S.alan = 0; S.sekme = 'gokyuzu';
+    const r = await api('/v2/sessions', 'POST', { ad: 'Elif', akademik: 'Veri Yapıları', hobi: null, dakika: 30, zaman: 'aksam', seviye: 'baslangic', sure: 14, son_tarihler: [], misafir: true });
+    S.sid = r.session_id; S.olaylar = []; S.son = 0; S.view = null; S.alan = 0; S.sekme = 'gokyuzu';
     kurulum();
     await sonucBekle((v) => v?.durum === 'hazir' && v.alanlar.every((a) => a.hazir), 30000);
     await bekle(1500);
@@ -1215,18 +1227,21 @@ async function canliDemo() {
     const hakem = [...document.querySelectorAll('.dugum')].find((d) => d.textContent.includes('Hakem')); if (hakem) hakem.click();
     S.demoCalisiyor = false;
     demoAnlat(9, N, 'Ekip sayfasında her ajanın bu süreçte ne yaptığını görebilirsin. Hakem’in çıktısı açık: düzeltilecek cümle ve doğru kaynak orada. Demo bitti; artık kendin dene.',
-      onceki ? dugme('Kendi gökyüzüme dön', () => { S.sid = onceki; depo.yaz(onceki); S.demo = false; $('#demo-serit')?.remove(); location.reload(); }, 'kucuk') : null,
-      dugme('Kapat', () => $('#demo-serit')?.remove(), 'ince kucuk'));
+      dugme(S.kullanici ? 'Kendi gökyüzüme dön' : 'Kayıt ol ve başla', () => location.reload(), 'kucuk'));
   } catch (e) {
     demoAnlat(0, N, e.message === 'durdu' ? 'Demo durduruldu.' : `Demo bir adımda durdu: ${e.message}`, dugme('Kapat', () => $('#demo-serit')?.remove(), 'ince kucuk'));
   } finally { S.demoCalisiyor = false; S.demo = false; }
 }
 
-/* ---------- başlangıç ---------- */
-arkaplan($('#gok'));
-S.sid = depo.oku();
-if (S.sid) {
-  // Daha önce gökyüzü kurmuş kullanıcı karşılama ekranına takılmaz: doğrudan uygulamaya girer.
+/* ---------- başlangıç: giriş yapmış kullanıcı doğrudan gökyüzüne girer ---------- */
+async function baslat() {
   goster('yukleniyor', h('div', { class: 'sayfa yukleniyor' }, h('div', { class: 'yukleniyor-ic' }, SVG_YILDIZ(), h('p', { class: 'sis' }, 'Gökyüzün açılıyor…'))));
-  devam();
-} else karsilama();
+  let ben = { kullanici: null, session_id: null };
+  try { ben = await api('/v2/auth/me'); } catch { /* sunucu kapalıysa karşılama hatayı gösterir */ }
+  S.kullanici = ben.kullanici; S.sid = ben.session_id;
+  if (!S.kullanici) karsilama();
+  else if (!S.sid) profil();
+  else devam();
+}
+arkaplan($('#gok'));
+baslat();
