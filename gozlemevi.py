@@ -19,6 +19,9 @@ from __future__ import annotations
 
 import copy
 import datetime as dt
+import hashlib
+import json
+import logging
 import os
 import threading
 import time
@@ -32,6 +35,8 @@ import konu_bekcisi
 import ikiz_ajan as ia
 import ogret_ajani as oa
 import store
+
+log = logging.getLogger("ikiz")
 
 AJANLAR = [
     {"ad": "Gözlemevi", "rol": "Ekibin yöneticisi", "tur": "llm+kod",
@@ -88,6 +93,8 @@ def _ad(s: dict, alan: str) -> str:
 def _onek(alan: str) -> str:
     tur, _, n = alan.partition("-")
     return tur[0] + (f"{n}-" if n else "")
+
+
 RISK_TR = {"momentum": "ivme kazanıyor", "steady": "düzenli", "slipping": "biraz aksıyor", "at_risk": "yavaşlıyor"}
 MUDAHALE_TR = {"shrink": "kısalt", "reorder": "yeniden sırala", "extend": "süreyi uzat",
                "swap_type": "görev tipini değiştir", "rescope": "hedefi küçült"}
@@ -109,11 +116,35 @@ def emit(s: dict, ajan: str, mesaj: str, tur: str = "info", veri: dict | None = 
     return e
 
 
-def _calistir(fn, *args) -> None:
+def _guvenli(fn, sid: str, *args) -> None:
+    """Bir ajan işi beklenmedik biçimde düşerse gökyüzü "işleniyor" durumunda takılı kalmaz; kullanıcıya söylenir."""
+    try:
+        fn(sid, *args)
+    except Exception:
+        log.exception("Ajan işi düştü: %s", getattr(fn, "__name__", fn))
+        s = store.get(sid)
+        if s is not None:
+            with store.lock(sid):
+                s["durum"] = "hazir"
+                emit(s, "Gözlemevi", "Bir adım beklenmedik bir hatayla durdu; gökyüzün korunuyor. Tekrar deneyebilirsin.", "error")
+        if os.environ.get("AJAN_SENKRON") == "1":
+            raise
+
+
+def _calistir(fn, sid: str, *args) -> None:
     if os.environ.get("AJAN_SENKRON") == "1":
-        fn(*args)
+        _guvenli(fn, sid, *args)
     else:
-        threading.Thread(target=fn, args=args, daemon=True).start()
+        threading.Thread(target=_guvenli, args=(fn, sid, *args), daemon=True).start()
+
+
+def _hazir_mi(tr: dict) -> bool:
+    """Kurulumu bitmiş takımyıldız (yeni eklenen bir konu henüz kuruluyor olabilir)."""
+    return "roadmap" in tr and "twin" in tr
+
+
+def _hazirlar(s: dict) -> dict[str, dict]:
+    return {a: tr for a, tr in s["tracks"].items() if _hazir_mi(tr)}
 
 
 def _twin(d: dict) -> ia.TwinState:
@@ -145,7 +176,7 @@ def _yildiz(tr: dict, gun: int, bitmis_id: set[str]) -> tuple[int, int]:
 
 def bugun_gorevleri(s: dict) -> list[dict]:
     out = []
-    for alan, tr in s["tracks"].items():
+    for alan, tr in _hazirlar(s).items():
         gun = tr["twin"]["day"] + 1
         for t in tr["roadmap"]["tasks"]:
             if t["day"] == gun:
@@ -195,6 +226,16 @@ def _kimlik_ver(d: dict, alan: str) -> dict:
     return d
 
 
+def _tekrar_gorevi(kaynak: dict, gun: int) -> dict:
+    baslik = kaynak["title"].removeprefix("Tekrar: ")
+    return {"id": "", "day": gun, "title": f"Tekrar: {baslik[:70]}", "minutes": max(10, kaynak["minutes"] // 2),
+            "skill": kaynak["skill"], "difficulty": max(1, kaynak["difficulty"] - 1), "type": "practice", "done": False}
+
+
+def _tekrar_mi(t: dict) -> bool:
+    return t["title"].startswith("Tekrar:")
+
+
 def _olcekle(d: dict, sure: int, bas: int = 1) -> dict:
     """Görevleri sırasını bozmadan [bas, sure] günlerine yayar. Süre uzarsa boş günlere tekrar görevi konur."""
     gorevler = sorted(d["tasks"], key=lambda x: x["day"])
@@ -211,8 +252,7 @@ def _olcekle(d: dict, sure: int, bas: int = 1) -> dict:
         if gun in dolu:
             son = next((x for x in gorevler if x["day"] == gun and x["type"] != "teach"), son)
         elif son:
-            gorevler.append({"id": "", "day": gun, "title": f"Tekrar: {son['title'][:70]}", "minutes": max(10, son["minutes"] // 2),
-                             "skill": son["skill"], "difficulty": max(1, son["difficulty"] - 1), "type": "practice", "done": False})
+            gorevler.append(_tekrar_gorevi(son, gun))
     d["tasks"] = sorted(gorevler, key=lambda x: (x["day"], x["type"] == "teach"))
     return d
 
@@ -245,8 +285,9 @@ def kurulum(sid: str, yalniz: list[str] | None = None) -> None:
         for alan, konu in konular.items():
             tr = s["tracks"][alan]
             emit(s, "Haritacı", f"{_ad(s, alan)} için {tr['goal']['duration_days']} günlük gök haritası çiziliyor…", "start", alan=alan)
-            tr["roadmap"] = _yol_uret(s, alan, konu, tr["profile"], tr["goal"])
+            harita = _yol_uret(s, alan, konu, tr["profile"], tr["goal"])
             tr["twin"] = asdict(ia.init_twin(_profile(tr["profile"]), _goal(tr["goal"])))
+            tr["roadmap"] = harita
             emit(s, "İkiz", f"{_ad(s, alan)} için yeni bir ikiz doğdu: {_ikiz_kimlik(s, alan, tr)['ad']}. Hiçbir şey bilmiyor; ona yalnızca sen öğreteceksin.", "done", alan=alan)
             _gecikme()
             emit(s, "Haritacı", f"{_ad(s, alan)}: {len(tr['roadmap']['tasks'])} yıldız yerleştirdi. İlk 3 gün kolay; her 4 günde bir \"ikizine öğret\".",
@@ -291,7 +332,8 @@ def gun_kapat(sid: str, mod: str = "gercek", gun: int = 1, tutarlilik: float = 0
         s["durum"] = "isleniyor"
         emit(s, "Gözlemevi", "Gün kapanıyor; ekip değerlendirmeye başlıyor.", "start")
         gun_no = None
-        for alan, tr in s["tracks"].items():
+        hazir = _hazirlar(s)
+        for alan, tr in hazir.items():
             state, rm = _twin(tr["twin"]), _roadmap(tr["roadmap"])
             if mod == "demo":
                 ia.fast_forward(state, rm, min(gun, tr["goal"]["duration_days"] - state.day), tutarlilik, seed=state.day + 7)
@@ -304,10 +346,10 @@ def gun_kapat(sid: str, mod: str = "gercek", gun: int = 1, tutarlilik: float = 0
         _gecikme()
 
         enriskli = []
-        for alan, tr in s["tracks"].items():
+        for alan, tr in hazir.items():
             st = tr["twin"]
             fark, gap = _fark_cumlesi(tr, s)
-            onek = f"{_ad(s, alan)}: " if len(s["tracks"]) > 1 else ""
+            onek = f"{_ad(s, alan)}: " if len(hazir) > 1 else ""
             if st["missed_days"] >= 1:
                 ozet = f"{onek}Art arda {st['missed_days']} gün atlandı. {fark}"
             else:
@@ -331,7 +373,7 @@ def gun_kapat(sid: str, mod: str = "gercek", gun: int = 1, tutarlilik: float = 0
         sira = {"at_risk": 3, "slipping": 2, "steady": 1, "momentum": 0}
         for alan in enriskli:                       # yeniden planlanan alanın riski "steady"e çekildi; koç eski riske göre konuşsun
             s["tracks"][alan]["_koc_risk"] = "at_risk"
-        en_zayif = max(s["tracks"], key=lambda a: sira[s["tracks"][a].get("_koc_risk") or s["tracks"][a]["twin"]["risk"]])
+        en_zayif = max(hazir, key=lambda a: sira[hazir[a].get("_koc_risk") or hazir[a]["twin"]["risk"]])
         tr = s["tracks"][en_zayif]
         koc_state = _twin(tr["twin"])
         if tr.get("_koc_risk"):
@@ -346,7 +388,7 @@ def gun_kapat(sid: str, mod: str = "gercek", gun: int = 1, tutarlilik: float = 0
         koc["alan"] = en_zayif
         s["coach"] = koc
         if koc["mode"] in ("slipping", "at_risk") and koc_state.day < tr["goal"]["duration_days"]:
-            yeni = {"id": f"{en_zayif[0]}-mini{koc_state.day + 1}", "day": koc_state.day + 1,
+            yeni = {"id": f"{_onek(en_zayif).rstrip('-')}-mini{koc_state.day + 1}", "day": koc_state.day + 1,
                     "title": icerik.hatirlatma_gorevi(tr["topic"]), "minutes": 5,
                     "skill": next(iter(tr["goal"]["target_skills"])), "difficulty": 1, "type": "practice", "done": False}
             tr["roadmap"]["tasks"].append(yeni)
@@ -355,7 +397,7 @@ def gun_kapat(sid: str, mod: str = "gercek", gun: int = 1, tutarlilik: float = 0
         else:
             emit(s, "Rehber", koc["message"], "advice", alan=en_zayif)
 
-        bitti = [a for a, t in s["tracks"].items() if t["twin"]["day"] >= t["goal"]["duration_days"]]
+        bitti = [a for a, t in hazir.items() if t["twin"]["day"] >= t["goal"]["duration_days"]]
         if bitti:
             emit(s, "Gözlemevi", "Hedef süresi doldu: " + ", ".join(_ad(s, a) for a in bitti) + ".", "done")
         s["durum"] = "hazir"
@@ -398,7 +440,8 @@ def _yorungeci(s: dict, alan: str, neden: str | None = None) -> dict | None:
         pid = uuid.uuid4().hex[:8]
         s["oneriler"][pid] = {"id": pid, "kaynak": "Yörüngeci", "alan": alan, "baslik": f"{_ad(s, alan)} planı: {mud_tr}",
                               "ozet": sonuc.get("explanation", ""), "degisiklikler": degisiklik, "etkilenen_gun": kalan,
-                              "durum": "bekliyor", "roadmap": yeni_rm, "yeni_sure": sonuc.get("new_duration_days")}
+                              "durum": "bekliyor", "roadmap": yeni_rm, "yeni_sure": sonuc.get("new_duration_days"),
+                              "imza": _plan_imzasi(tr)}
         emit(s, "Yörüngeci", f"Önerdiği değişiklik büyük ({mud_tr}); onayına sunuldu.", "decision",
              {"oneri_id": pid, "degisiklikler": degisiklik}, alan)
     else:
@@ -412,14 +455,17 @@ def _yorungeci(s: dict, alan: str, neden: str | None = None) -> dict | None:
 
 # --------------------------------------------------------------- ekibe görev ver
 def _kw(metin: str) -> set[str]:
+    """Görev metninden niyetleri çıkarır. "Mini sınav hazırla" bir sınav planı isteği değildir; "vizem var" ise öyledir."""
     n = gv._norm(metin)
     k = set()
-    if any(w in n for w in ("vize", "final", "sinav", "butunleme")) and any(w in n for w in ("plan", "hafta", "hazirl", "ayarla")):
+    mini = any(w in n for w in ("mini sinav", "deneme sinav", "test hazirla", "soru hazirla", "sinav hazirla", "quiz"))
+    if mini:
+        k.add("mini_sinav")
+    if any(w in n for w in ("vize", "final", "butunleme", "sinavim", "sinav haftasi", "sinava")) or (
+            not mini and "sinav" in n and any(w in n for w in ("plan", "ayarla", "yaklas", "var"))):
         k.add("sinav_plani")
     if "kaynak" in n:
         k.add("kaynak")
-    if any(w in n for w in ("mini sinav", "deneme", "test hazirla", "soru hazirla", "sinav hazirla")):
-        k.add("mini_sinav")
     if any(w in n for w in ("yogun", "yorgun", "zorlan", "yetisemiyorum", "hafiflet", "hafifle", "kolaylastir")):
         k.add("hafiflet")
     return k
@@ -457,17 +503,19 @@ def gorev_denetle_ve_planla(sid: str, metin: str) -> dict:
 
 
 def _akademik_alan(s: dict) -> str:
-    return next((a for a in s["tracks"] if a.startswith("akademik")), next(iter(s["tracks"])))
+    """Görev verilecek takımyıldız: hazır bir akademik konu, yoksa hazır herhangi bir konu."""
+    hazir = _hazirlar(s) or s["tracks"]
+    return next((a for a in hazir if a.startswith("akademik")), next(iter(hazir)))
 
 
 def _sinav_gunu(s: dict, tr: dict) -> int | None:
-    """Vize/final tarihini plan gününe çevirir (bugün = 0. gün)."""
-    bugun = dt.date.fromisoformat(s["baslangic"])
+    """Vize/final tarihini plan gününe çevirir: bugün planın (twin.day + 1). günüdür."""
+    bugun = dt.date.today()
     adaylar = [d for d in s["son_tarihler"] if any(k in gv._norm(d["baslik"]) for k in ("vize", "final", "sinav"))]
     if not adaylar:
         return None
     hedef = min(adaylar, key=lambda d: d["tarih"])
-    return max(1, (dt.date.fromisoformat(hedef["tarih"]) - bugun).days + tr["twin"]["day"])
+    return max(1, tr["twin"]["day"] + 1 + (dt.date.fromisoformat(hedef["tarih"]) - bugun).days)
 
 
 def _gorev_yurut(sid: str, jid: str) -> None:
@@ -533,7 +581,8 @@ def _sinav_plani(s: dict, job: dict, alan: str, tr: dict) -> None:
                           "degisiklikler": [{"etiket": "Vizeye kadar", "once": "öğren + uygula", "sonra": "tekrar ağırlıklı"},
                                             {"etiket": "Vize sonrası 2 gün", "once": "normal", "sonra": "%40 hafif"},
                                             {"etiket": "Hedef tarihi", "once": f"{tr['goal']['duration_days']}. gün", "sonra": "değişmedi"}],
-                          "etkilenen_gun": len(degisen_gunler), "durum": "bekliyor", "roadmap": yeni, "yeni_sure": None}
+                          "etkilenen_gun": len(degisen_gunler), "durum": "bekliyor", "roadmap": yeni, "yeni_sure": None,
+                          "imza": _plan_imzasi(tr)}
     emit(s, "Yörüngeci", f"{len(degisen_gunler)} günü etkileyen bir vize planı hazırladı; onayına sunuldu.", "decision",
          {"oneri_id": pid}, alan)
 
@@ -548,6 +597,18 @@ def _mini_sinav(s: dict, job: dict, alan: str, tr: dict) -> None:
     emit(s, "Kaşif", f"{len(sorular)} soruluk mini sınav hazırladı.", "done", alan=alan)
 
 
+def _mini_mi(t: dict) -> bool:
+    return "-mini" in t["id"]
+
+
+def _plan_imzasi(tr: dict) -> str:
+    """Planın o anki hali. Öneri hazırlandıktan sonra plan değiştiyse (gün ilerledi, süre değişti, başka bir öneri
+    uygulandı) eski öneri uygulanmaz; uygulansaydı yeni ilerlemeyi silerdi. Rehber'in eklediği mini görevler sayılmaz."""
+    gorevler = [t for t in tr["roadmap"]["tasks"] if not _mini_mi(t)]
+    govde = json.dumps([gorevler, tr["goal"]["duration_days"], tr["twin"]["day"]], sort_keys=True, ensure_ascii=False)
+    return hashlib.sha1(govde.encode()).hexdigest()
+
+
 def oneriyi_karara_bagla(sid: str, pid: str, onayla: bool) -> dict | None:
     s = store.get(sid)
     with store.lock(sid):
@@ -555,7 +616,16 @@ def oneriyi_karara_bagla(sid: str, pid: str, onayla: bool) -> dict | None:
         if not p or p["durum"] != "bekliyor":
             return None
         tr = s["tracks"][p["alan"]]
+        if onayla and p.get("imza") and p["imza"] != _plan_imzasi(tr):
+            p["durum"] = "eskidi"
+            p.pop("roadmap", None)
+            emit(s, "Gözlemevi", f"{p['baslik']}: bu öneri hazırlandıktan sonra planın değişti; eski öneriyi uygulamadım. "
+                 "İstersen ekipten yeniden iste.", "info", {"oneri_id": pid}, p["alan"])
+            store.save(s)
+            return p
         if onayla:
+            onerilen = {t["id"] for t in p["roadmap"]["tasks"]}
+            p["roadmap"]["tasks"] += [t for t in tr["roadmap"]["tasks"] if _mini_mi(t) and t["id"] not in onerilen]
             tr["roadmap"] = p["roadmap"]
             if p.get("yeni_sure"):
                 tr["goal"]["duration_days"] = p["yeni_sure"]
@@ -578,11 +648,11 @@ def ogret_konu(s: dict, alan: str) -> str:
     return s["tracks"][alan]["topic"].split("·")[-1].strip()
 
 
-def ogret_ekle(sid: str, metin: str, alan: str) -> dict:
+def ogret_ekle(sid: str, metin: str, alan: str | None) -> dict:
     s = store.get(sid)
     with store.lock(sid):
         if alan not in s["tracks"]:
-            alan = next(iter(s["tracks"]))
+            alan = s["ogret"]["alan"] if s["ogret"]["alan"] in s["tracks"] else next(iter(s["tracks"]))
         if s["ogret"]["alan"] != alan:
             _ogret_sec(s, alan, None)
         t = s["ogret"]
@@ -613,7 +683,7 @@ def _ogret_sec(s: dict, alan: str, kavram: str | None) -> None:
     """Öğretilen kavramı değiştirir. Her kavramın cümleleri ayrı tutulur; geri dönünce kaldığın yerden devam edersin."""
     t = s["ogret"]
     taslak = s.setdefault("ogret_taslak", {})
-    taslak[f"{t['alan']}|{t.get('kavram') or ''}"] = {"cumleler": t["cumleler"], "son": t["son"]}
+    taslak[f"{t['alan']}|{t.get('kavram') or ''}"] = {"cumleler": t["cumleler"], "son": t["son"], "serbest_anahtar": t.get("serbest_anahtar")}
     anahtar = f"{alan}|{kavram or ''}"
     tr = s["tracks"][alan]
     if anahtar in taslak:
@@ -623,7 +693,8 @@ def _ogret_sec(s: dict, alan: str, kavram: str | None) -> None:
         d = {"cumleler": list(b.get("cumleler", [])), "son": b.get("son")}
     else:
         d = {"cumleler": [], "son": None}
-    t.update({"alan": alan, "kavram": kavram, "konu": ogret_konu(s, alan), "cumleler": list(d["cumleler"]), "son": d["son"]})
+    t.update({"alan": alan, "kavram": kavram, "konu": ogret_konu(s, alan), "cumleler": list(d["cumleler"]), "son": d["son"],
+              "serbest_anahtar": d.get("serbest_anahtar")})
 
 
 def ogret_sec(sid: str, alan: str, kavram: str | None) -> dict:
@@ -654,8 +725,11 @@ def ogret_cumle_sil(sid: str, no: int) -> dict:
 def ogret_sil(sid: str) -> None:
     s = store.get(sid)
     with store.lock(sid):
-        s["ogret"] = {"alan": s["ogret"]["alan"], "konu": s["ogret"]["konu"], "cumleler": [], "son": None}
-        emit(s, "Gözlemevi", "İkizin öğrendiklerini sildi.", "info")
+        t = s["ogret"]
+        t.update({"cumleler": [], "son": None, "serbest_anahtar": None})       # kavram seçimi korunur
+        s.setdefault("ogret_taslak", {})[f"{t['alan']}|{t.get('kavram') or ''}"] = {"cumleler": [], "son": None}
+        emit(s, "Gözlemevi", "Taslak cümlelerin silindi. İkizinin önceki sınavlarda öğrendikleri duruyor.", "info")
+        store.save(s)
 
 
 def _anlat_gorevleri(tr: dict) -> list[dict]:
@@ -676,6 +750,14 @@ def _ogretilecek_gorev(s: dict, alan: str, gorev_id: str | None) -> dict | None:
     bilgi = tr.get("ikiz_bilgi", {})
     return (next((x for x in acik if x["day"] == bugun), None)
             or next((x for x in acik if bilgi.get(x["id"], {}).get("star", "sonuk") == "sonuk"), None))
+
+
+def _yeni_serbest_anahtar(tr: dict) -> str:
+    bilgi = tr.get("ikiz_bilgi", {})
+    n = 1
+    while f"serbest-{n}" in bilgi:
+        n += 1
+    return f"serbest-{n}"
 
 
 def ogret_sinav(sid: str, gorev_id: str | None = None) -> dict:
@@ -703,6 +785,8 @@ def ogret_sinav(sid: str, gorev_id: str | None = None) -> dict:
         except ia.HATALAR:
             emit(s, "Gözlemevi", "Model yanıt vermedi; sınav yapılamadı. Biraz sonra yeniden dene.", "error", alan=alan)
             return {"ok": False, "mesaj": "Model şu an yanıt vermiyor. Biraz sonra yeniden dene."}
+        if not sonuc.exam and sonuc.guvenlik.get("engel"):
+            return {"ok": False, "mesaj": sonuc.guvenlik.get("mesaj") or "Anlatım şu an ikize gönderilemedi."}
         gorunum = oa.public_view(sonuc)
         gorunum["kavram"] = baslik
         gorunum["geri_bildirim"] = _hakem_geri_bildirimi(gorunum, t["cumleler"], baslik)
@@ -710,7 +794,11 @@ def ogret_sinav(sid: str, gorev_id: str | None = None) -> dict:
             emit(s, "Hakem", gorunum["geri_bildirim"]["ozet"], "decision" if gorunum["geri_bildirim"]["sorunlu"] else "done", alan=alan)
         t["son"] = gorunum
         if sonuc.exam:
-            anahtar = gorev["id"] if gorev else f"serbest-{len(tr.get('ikiz_bilgi', {})) + 1}"
+            if gorev:
+                anahtar = gorev["id"]
+            else:                                   # aynı serbest anlatımı yeniden sınamak yeni yıldız açmaz
+                anahtar = t.get("serbest_anahtar") or _yeni_serbest_anahtar(tr)
+                t["serbest_anahtar"] = anahtar
             onceki = tr.setdefault("ikiz_bilgi", {}).get(anahtar)
             if onceki and onceki.get("star") == "halkali" and sonuc.star != "halkali":
                 emit(s, "İkiz", f"{_ikiz_ad(s, alan)}: “{baslik}” için önceki anlatımın daha iyiydi; bilgimi korudum, bu denemeyi kaydetmedim.", "info", alan=alan)
@@ -816,7 +904,7 @@ def gorunum(sid: str) -> dict | None:
         return None
     alanlar = []
     for alan, tr in s["tracks"].items():
-        if "roadmap" not in tr:
+        if not _hazir_mi(tr):
             alanlar.append({"alan": alan, "etiket": ALAN_ADI[_tur(alan)], "konu": tr["topic"], "hazir": False, "ikiz_kimlik": _ikiz_kimlik(s, alan, tr)})
             continue
         gun = tr["twin"]["day"]
@@ -837,11 +925,11 @@ def gorunum(sid: str) -> dict | None:
             "harita": [{"id": x["id"], "day": x["day"], "title": x["title"], "type": x["type"], "minutes": x["minutes"],
                         "done": bool(x["done"] or x["id"] in s["bitenler"])} for x in tr["roadmap"]["tasks"]],
         })
-    bugun = bugun_gorevleri(s) if s["durum"] != "kuruluyor" and all("roadmap" in t for t in s["tracks"].values()) else []
+    bugun = bugun_gorevleri(s)
     ilk = next(iter(s["tracks"].values()))
     gun = ilk["twin"]["day"] + 1 if "twin" in ilk else 1
     sure = ilk["goal"]["duration_days"] if "goal" in ilk else 21
-    today = dt.date.fromisoformat(s["baslangic"])
+    today = dt.date.today()
     son_olay = {}
     for e in s["olaylar"]:
         son_olay[e["ajan"]] = {"tur": e["tur"], "mesaj": e["mesaj"]}
@@ -985,7 +1073,7 @@ def sohbet(sid: str, metin: str, ajan: str | None = None, alan: str | None = Non
             emit(s, "Gözlemevi", f"Mesaj kabul edilmedi ({d.engel}).", "guard")
             return {"ok": False, "engel": d.engel, "mesaj": d.mesaj}
         ajan = ajan if ajan in SOHBET_AJANLARI else _sohbet_ajani(metin)
-        alan = alan if alan in s["tracks"] else next(iter(s["tracks"]))
+        alan = alan if alan in s["tracks"] and _hazir_mi(s["tracks"][alan]) else _akademik_alan(s)
         b = _sohbet_baglam(s, alan)
         s.setdefault("sohbet", []).append({"rol": "kullanici", "ajan": None, "metin": metin.strip()})
         emit(s, ajan, "Mesajını okuyor…", "start", alan=alan)
@@ -1040,6 +1128,11 @@ def profil_guncelle(sid: str, alanlar: dict) -> dict:
     s = store.get(sid)
     with store.lock(sid):
         degisen = []
+        yeni_sure = int(alanlar["sure"]) if alanlar.get("sure") and alanlar["sure"] != s.get("sure", 21) else None
+        if yeni_sure:                                # önce doğrula: istek reddedilirse hiçbir alan değişmemeli
+            for tr in _hazirlar(s).values():
+                if yeni_sure <= tr["twin"]["day"] + 1:
+                    return {"ok": False, "mesaj": f"Süre bugünden ({tr['twin']['day'] + 1}. gün) uzun olmalı."}
         for k_api, k_s in (("ad", "name"), ("zaman", "zaman"), ("not_", "not"), ("son_tarihler", "son_tarihler")):
             if k_api in alanlar and alanlar[k_api] is not None and alanlar[k_api] != s.get(k_s):
                 s[k_s] = alanlar[k_api]
@@ -1059,26 +1152,21 @@ def profil_guncelle(sid: str, alanlar: dict) -> dict:
                         x["minutes"] = int(max(5, min(120, round(x["minutes"] * oran / 5) * 5)))
             emit(s, "Haritacı", f"Günlük süren {alanlar['dakika']} dakika oldu; kalan görevlerin süresini buna göre ayarladı.", "done")
             degisen.append("dakika")
-        if alanlar.get("sure") and alanlar["sure"] != s.get("sure", 21):
-            yeni = int(alanlar["sure"])
-            for alan, tr in s["tracks"].items():
-                if "roadmap" not in tr:
-                    continue
-                gun = tr["twin"]["day"]
-                if yeni <= gun + 1:
-                    return {"ok": False, "mesaj": f"Süre bugünden ({gun + 1}. gün) uzun olmalı."}
+        if yeni_sure:
+            yeni = yeni_sure
             s["sure"] = yeni
-            for alan, tr in s["tracks"].items():
-                if "roadmap" not in tr:
-                    continue
+            for alan, tr in _hazirlar(s).items():
                 gun = tr["twin"]["day"]
                 gecmis = [x for x in tr["roadmap"]["tasks"] if x["day"] <= gun]
-                kalan = {"weeks": tr["roadmap"]["weeks"], "tasks": [x for x in tr["roadmap"]["tasks"] if x["day"] > gun and not x["id"].startswith("tekrar")]}
-                kalan["tasks"] = [x for x in kalan["tasks"] if not x["title"].startswith("Tekrar:")] or kalan["tasks"]
+                gelecek = [x for x in tr["roadmap"]["tasks"] if x["day"] > gun]
+                kalan = {"weeks": tr["roadmap"]["weeks"], "tasks": [x for x in gelecek if not _tekrar_mi(x)] or gelecek}
+                if not kalan["tasks"]:              # plan bitmişti: yeni günlere geçmiş görevlerden tekrar koy
+                    ornek = [x for x in gecmis if x["type"] != "teach" and not _tekrar_mi(x)][-5:] or gecmis[-1:]
+                    kalan["tasks"] = [_tekrar_gorevi(ornek[i % len(ornek)], g) for i, g in enumerate(range(gun + 1, yeni + 1))] if ornek else []
                 _olcekle(kalan, yeni, gun + 1)
-                for i, x in enumerate(kalan["tasks"]):
+                for x in kalan["tasks"]:
                     if not x["id"]:
-                        x["id"] = f"{_onek(alan)}r{gun}-{i}"
+                        x["id"] = f"{_onek(alan)}r{uuid.uuid4().hex[:6]}"     # her zaman tekil
                 tr["roadmap"]["tasks"] = gecmis + kalan["tasks"]
                 tr["goal"]["duration_days"] = yeni
                 emit(s, "Haritacı", f"{_ad(s, alan)}: hedef süresi {yeni} gün oldu; kalan {len(kalan['tasks'])} görevi yeni takvime yaydı.", "done", alan=alan)
@@ -1097,12 +1185,16 @@ def profil_guncelle(sid: str, alanlar: dict) -> dict:
 
 
 # ------------------------------------------------------- yeni takımyıldız
+def _ayni_konu(a: str, b: str) -> bool:
+    return " ".join(gv._norm(icerik.konu_adi(a)).split()) == " ".join(gv._norm(icerik.konu_adi(b)).split())
+
+
 def takimyildiz_ekle(sid: str, tur: str, konu: str) -> dict:
     s = store.get(sid)
     with store.lock(sid):
         if len(s["tracks"]) >= 6:
             return {"ok": False, "mesaj": "En fazla 6 takımyıldız açabilirsin."}
-        if any(gv._norm(tr["topic"]) == gv._norm(konu) for tr in s["tracks"].values()):
+        if any(_ayni_konu(tr["topic"], konu) for tr in s["tracks"].values()):
             return {"ok": False, "mesaj": "Bu konu zaten gökyüzünde."}
         anahtar = tur
         n = 2
@@ -1124,7 +1216,7 @@ def pratik_ekle(sid: str, alan: str, beceri: str, bpm: int | None, dakika: int, 
         if alan not in s["tracks"]:
             return {"ok": False, "mesaj": "Takımyıldız bulunamadı."}
         if not_:
-            d = gv.denetle(not_)
+            d = gv.alan_denetle(not_)
             if not d.izin:
                 return {"ok": False, "mesaj": d.mesaj}
         tr = s["tracks"][alan]
@@ -1158,7 +1250,7 @@ def ajan_ciktisi(sid: str, ajan: str) -> dict | None:
         satirlar = [x if isinstance(x, dict) else str(x) for x in satirlar if x]
         if satirlar:
             bolumler.append({"baslik": baslik, "satirlar": satirlar})
-    hazir = {a: tr for a, tr in s["tracks"].items() if "roadmap" in tr}
+    hazir = _hazirlar(s)
     if ajan == "Astronom":
         b("Profil", [f"Ad: {s['name']}", f"Günlük süre: {s['daily_minutes']} dk", f"Saat: {s['zaman']}", f"Seviye: {s.get('seviye')}",
                      f"Hedef süresi: {s.get('sure', 21)} gün", f"Not: {gv.maskele(s.get('not', ''))}" if s.get("not") else ""])
@@ -1269,7 +1361,7 @@ def kaynak_ekle(sid: str, alan: str, baslik: str, url: str | None, tur: str, not
             return {"ok": False, "mesaj": "Takımyıldız bulunamadı."}
         for metin in (baslik, not_):
             if metin:
-                d = gv.denetle(metin)
+                d = gv.alan_denetle(metin)
                 if not d.izin:
                     return {"ok": False, "mesaj": d.mesaj}
         if url:

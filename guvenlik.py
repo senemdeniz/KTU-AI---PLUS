@@ -205,6 +205,24 @@ def denetle(metin: str, oturum: str | None = None) -> Denetim:
 
 
 # --------------------------------------------------------- çıktı doğrulama
+def alan_denetle(metin: str) -> Denetim:
+    """Kısa form alanları (ad, konu, not, kaynak adı) için: kişisel veri, zararlı içerik ve talimat denetimi.
+    Öğretme metnine özgü "cümle" kuralları uygulanmaz; "AI" ya da "C#" gibi kısa bir konu da geçerlidir."""
+    metin = temizle(metin)
+    h = hassas_icerik(metin)
+    if h == "kendine_zarar":
+        return Denetim(False, engel=h, mesaj=DESTEK_MESAJI)
+    if h:
+        return Denetim(False, engel=h, mesaj="Bu içerik kabul edilmedi. Öğrenmeyle ilgili bir şey yaz.")
+    kv = kisisel_veri_bul(metin)
+    if kv:
+        turler = ", ".join(sorted({b["tur"] for b in kv}))
+        return Denetim(False, engel="kisisel_veri", mesaj=f"Bu alanda {turler} var. Kişisel bilgi yazma.")
+    if enjeksiyon_mu(metin):
+        return Denetim(False, engel="talimat_gibi", mesaj="Bu alan talimat gibi yazılmış. Yalnızca istenen bilgiyi yaz.")
+    return Denetim(True)
+
+
 def _icerik_kelimeleri(s: str) -> set[str]:
     return {w[:5] for w in re.findall(r"\w+", _norm(s)) if len(w) > 3}
 
