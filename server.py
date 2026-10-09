@@ -1,7 +1,7 @@
 """İkiz API (v2): Gözlemevi çok-ajanlı sistemi için HTTP katmanı.
 
-Çalıştır:  uvicorn server:app --host 0.0.0.0 --port 8000
-Ortam: ANTHROPIC_API_KEY | HF_TOKEN (+LLM_MODEL) | LLM_API_KEY+LLM_BASE_URL; yoksa demo modu. IKIZ_DB=kalıcı SQLite yolu.
+Çalıştır:  python3 -m uvicorn server:app --port 8000
+Model anahtarı .env dosyasından okunur (bkz. .env.example); anahtar yoksa ajanlar demo içerikle çalışır.
 Sözleşme: docs/API.md
 """
 from __future__ import annotations
@@ -12,21 +12,29 @@ import os
 import re
 import time
 
-from fastapi import FastAPI, HTTPException, Request
+import ayar
+
+ayar.yukle()   # .env, model sağlayıcısı seçilmeden önce okunmalı
+
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 import gozlemevi as g
 import guvenlik as gv
+import hesap
 import ikiz_ajan as ia
 import store
 
 app = FastAPI(title="İkiz API", version="2.0")
-# Kimlik bilgisi (cookie) kullanılmaz; oturum kimliği 128 bitlik gizli bir değerdir. Üretimde IKIZ_CORS ile kısıtla.
-_IZIN = [o for o in os.environ.get("IKIZ_CORS", "*").split(",") if o]
-app.add_middleware(CORSMiddleware, allow_origins=_IZIN, allow_methods=["GET", "POST", "PATCH", "DELETE"], allow_headers=["Content-Type"])
+# Arayüz aynı kökenden sunulur; başka kökenlere çerez gönderilmez (allow_credentials kapalı).
+_IZIN = [o for o in os.environ.get("IKIZ_CORS", "").split(",") if o]
+if _IZIN:
+    app.add_middleware(CORSMiddleware, allow_origins=_IZIN, allow_methods=["GET", "POST", "PATCH", "DELETE"], allow_headers=["Content-Type"])
+CEREZ = "ikiz_giris"
+_SID_YOLU = re.compile(r"^/v2/sessions/([0-9a-f]{32})(/|$)")
 
 _CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
@@ -50,6 +58,16 @@ async def koruma(request: Request, call_next):
             return JSONResponse({"detail": "Çok fazla istek. Biraz bekle."}, status_code=429, headers={"Retry-After": "30"})
         k.append(simdi)
         _SINIR[anahtar] = k
+    # CSRF: çerez SameSite=Lax; ek olarak yazma istekleri arayüzün eklediği özel başlığı taşımalı. Başka bir site
+    # bu başlığı CORS ön onayı olmadan ekleyemez. Proxy (Codespaces, Render) arkasında da çalışır.
+    if yazma and request.url.path.startswith("/v2/") and (
+            request.headers.get("x-ikiz") != "1" or request.headers.get("sec-fetch-site") == "cross-site"):
+        return JSONResponse({"detail": "Bu istek başka bir siteden geldiği için reddedildi."}, status_code=403)
+    # Hesaba bağlı bir gökyüzüne yalnızca sahibi erişir (misafir/demo gökyüzleri hariç).
+    if (m := _SID_YOLU.match(request.url.path)):
+        s = store.get(m.group(1))
+        if s and s.get("sahip") and s["sahip"] != hesap.kim(request.cookies.get(CEREZ)):
+            return JSONResponse({"detail": "Oturum bulunamadı"}, status_code=404)
     sinir = 6_000_000 if request.url.path.endswith("/teach/image") else 10_000_000 if request.url.path.endswith("/teach/audio") else GOVDE_LIMIT
     if int(request.headers.get("content-length") or 0) > sinir:
         return JSONResponse({"detail": "İstek çok büyük."}, status_code=413)
@@ -76,6 +94,7 @@ class OturumIstek(BaseModel):
     hedef_notu: str = Field(default="", max_length=200)
     sure: int = Field(default=21, ge=7, le=90)
     avatar: int = Field(default=0, ge=0, le=3)
+    misafir: bool = False   # giriş yapmadan izlenen canlı demo
 
 
 class GunIstek(BaseModel):
@@ -113,15 +132,105 @@ def health():
     return {"ok": True, "surum": "2.0", "demo": ia.is_mock(), "saglayici": ia.provider(), "model": ia.model_name(), "yetenekler": ia.yetenekler()}
 
 
+# ------------------------------------------------------------------ hesaplar
+class HesapIstek(BaseModel):
+    kullanici: str = Field(min_length=1, max_length=40)
+    sifre: str = Field(min_length=1, max_length=200)
+
+
+_GIRIS_DENEME: dict[str, list[float]] = {}
+GIRIS_LIMIT = int(os.environ.get("IKIZ_GIRIS_LIMIT", 8))      # 15 dakikada hatalı giriş / kayıt sayısı
+
+
+def _deneme_asildi(*anahtarlar: str) -> bool:
+    simdi = time.time()
+    for a in anahtarlar:
+        _GIRIS_DENEME[a] = [t for t in _GIRIS_DENEME.get(a, []) if simdi - t < 900]
+        if len(_GIRIS_DENEME[a]) >= GIRIS_LIMIT:
+            return True
+    return False
+
+
+def _cerez_ver(request: Request, response: Response, kullanici: str) -> None:
+    guvenli = request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
+    response.set_cookie(CEREZ, hesap.giris_ac(kullanici), max_age=hesap.GIRIS_SURESI, httponly=True, samesite="lax", secure=guvenli, path="/")
+
+
+def _ben(request: Request) -> dict:
+    k = hesap.kim(request.cookies.get(CEREZ))
+    return {"kullanici": k, "session_id": hesap.gokyuzu(k) if k else None}
+
+
+@app.post("/v2/auth/register")
+def kayit_ol(r: HesapIstek, request: Request, response: Response):
+    ip = request.client.host if request.client else "?"
+    if _deneme_asildi("kayit:" + ip):
+        raise HTTPException(429, "Çok fazla deneme. 15 dakika sonra tekrar dene.")
+    _GIRIS_DENEME.setdefault("kayit:" + ip, []).append(time.time())
+    ok, sonuc = hesap.kayit(r.kullanici, r.sifre)
+    if not ok:
+        raise HTTPException(409 if "alınmış" in sonuc else 422, sonuc)
+    _cerez_ver(request, response, sonuc)
+    return {"kullanici": sonuc, "session_id": None}
+
+
+@app.post("/v2/auth/login")
+def giris_yap(r: HesapIstek, request: Request, response: Response):
+    ip = request.client.host if request.client else "?"
+    k = hesap.normalize(r.kullanici)
+    if _deneme_asildi("ip:" + ip, "k:" + k):
+        raise HTTPException(429, "Çok fazla hatalı deneme. 15 dakika sonra tekrar dene.")
+    kullanici = hesap.dogrula(r.kullanici, r.sifre)
+    if not kullanici:
+        for a in ("ip:" + ip, "k:" + k):
+            _GIRIS_DENEME.setdefault(a, []).append(time.time())
+        raise HTTPException(401, "Kullanıcı adı ya da şifre yanlış.")
+    _cerez_ver(request, response, kullanici)
+    return {"kullanici": kullanici, "session_id": hesap.gokyuzu(kullanici)}
+
+
+@app.post("/v2/auth/logout")
+def cikis_yap(request: Request, response: Response):
+    hesap.giris_kapat(request.cookies.get(CEREZ))
+    response.delete_cookie(CEREZ, path="/")
+    return {"ok": True}
+
+
+@app.get("/v2/auth/me")
+def ben(request: Request):
+    return _ben(request)
+
+
+@app.delete("/v2/auth/account")
+def hesabi_sil(request: Request, response: Response):
+    k = hesap.kim(request.cookies.get(CEREZ))
+    if not k:
+        raise HTTPException(401, "Giriş yapmadın.")
+    hesap.hesap_sil(k)
+    response.delete_cookie(CEREZ, path="/")
+    return {"ok": True}
+
+
+# ------------------------------------------------------------------ gökyüzü
 @app.post("/v2/sessions")
-def oturum_ac(r: OturumIstek):
+def oturum_ac(r: OturumIstek, request: Request):
+    kullanici = None if r.misafir else hesap.kim(request.cookies.get(CEREZ))   # canlı demo hesaba yazılmaz
+    if not kullanici and not r.misafir:
+        raise HTTPException(401, "Gökyüzünü kaydetmek için önce kayıt ol ya da giriş yap.")
+    if kullanici and hesap.gokyuzu(kullanici):
+        raise HTTPException(409, "Zaten bir gökyüzün var. Yeni konu için takımyıldız ekle.")
     if not r.akademik and not r.hobi:
         raise HTTPException(422, "En az bir alan seç: akademik veya hobi")
     for alan_metni in (r.ad, r.akademik or "", r.hobi or "", r.hedef_notu, *[d.baslik for d in r.son_tarihler]):
         d = gv.denetle(alan_metni) if alan_metni.strip() else None
         if d and not d.izin:
             raise HTTPException(422, d.mesaj or "Bu alan kabul edilmedi")
-    sid = g.yeni_oturum(r.ad, r.akademik, r.hobi, r.dakika, r.zaman, [d.model_dump() for d in r.son_tarihler], r.seviye, r.hedef_notu, r.sure, r.avatar)
+    if not kullanici:
+        store.eski_misafirleri_sil()
+    sid = g.yeni_oturum(r.ad, r.akademik, r.hobi, r.dakika, r.zaman, [d.model_dump() for d in r.son_tarihler], r.seviye, r.hedef_notu, r.sure, r.avatar,
+                        sahip=kullanici)
+    if kullanici:
+        hesap.gokyuzu_bagla(kullanici, sid)
     g._calistir(g.kurulum, sid)
     return {"session_id": sid}
 
@@ -134,8 +243,10 @@ def oturum(sid: str):
 
 @app.delete("/v2/sessions/{sid}")
 def oturum_sil(sid: str):
-    if not _SID.match(sid) or not store.delete(sid):
-        raise HTTPException(404, "Oturum bulunamadı")
+    s = _var(sid)
+    if s.get("sahip"):
+        hesap.gokyuzu_bagla(s["sahip"], None)
+    store.delete(sid)
     return {"ok": True}
 
 
