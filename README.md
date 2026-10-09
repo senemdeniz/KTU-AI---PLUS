@@ -15,6 +15,7 @@
 | Gözcü | **kod** | İkizi ve riski deterministik hesaplar (`ikiz_ajan.py`) |
 | Yörüngeci | LLM | Plan gerideyse en hafif müdahaleyi seçer; küçüğü uygular, büyüğünü onaya sunar |
 | Rehber | LLM | Suçlamadan tek net adım önerir |
+| Kaynak Avcısı | LLM + kod | Konu için kaynakları puanlar, sana en uygun tekini gerekçesiyle seçer. Bağlantıyı model değil kod verir: elle doğrulanmış liste (şimdilik Veri Yapıları) ya da arama bağlantısı |
 | Konu Bekçisi | LLM + kod | Anlattığının seçilen konuyla bağını denetler; konu dışıysa İkiz'e ulaştırmaz, model yanıt vermezse kapalı kalır |
 | Kaşif · İkiz · Hakem | LLM | *İkizine öğret*: Kaşif referans cevabı saklar, İkiz yalnızca kullanıcının cümlelerini bilir, Hakem bağımsız doğrular |
 
@@ -34,15 +35,15 @@ Kişisel veri (TC kimlik, telefon, e-posta, IBAN, kart) engellenir; prompt injec
 
 ## Çalıştırma
 
-Gerçek model bağlantısını önce tek komutla dene: `python3 llm_kontrol.py` (hata olursa nedenini söyler).
-
 ```bash
 pip install -r requirements.txt
-uvicorn server:app --port 8000          # API (demo modunda anahtarsız çalışır)
-
-cd mobile && npm install
-EXPO_PUBLIC_API_URL=http://localhost:8000 npx expo start --web   # ya da telefonda Expo Go
+python3 llm_kontrol.py                  # (isteğe bağlı) gerçek model bağlantısını dene
+python3 -m uvicorn server:app --port 8000
 ```
+
+Sonra tarayıcıda **http://127.0.0.1:8000** adresini aç: tam web arayüzü sunucudan gelir (`web/`, derleme gerektirmez). Akış: karşılama → profil → ikizin oluşuyor (ajanlar canlı) → ekibin neler yapabileceği → uygulama (Gökyüzü, Yol haritası + kaynaklar, Bugün, Ekip, İkizin, İkizine öğret, Veriler ve güvenlik).
+
+Mobil uygulama (Expo) aynı API'yi kullanır: `cd mobile && npm install && EXPO_PUBLIC_API_URL=http://127.0.0.1:8000 npx expo start --web`.
 
 **Model sağlayıcısı** (yalnızca sunucu ortam değişkeni; anahtarı asla sohbete/koda yazma):
 
@@ -57,11 +58,16 @@ EXPO_PUBLIC_API_URL=http://localhost:8000 npx expo start --web   # ya da telefon
 
 Hiçbiri yoksa **demo modu** çalışır: içerik elle yazılmış (Türev ve Gitar için özel), akış ve karar mantığı gerçektir.
 
-Testler: `python -m pytest -q` (19 test). API sözleşmesi: [`docs/API.md`](docs/API.md). Jüri anlatımı: [`DEMO.md`](DEMO.md).
+Testler: `python -m pytest -q` (23 test). API sözleşmesi: [`docs/API.md`](docs/API.md). Jüri anlatımı: [`DEMO.md`](DEMO.md).
+
+## Güvenlik önlemleri (özet)
+
+Unicode normalleştirme (tam genişlik rakam, sıfır genişlikli karakter, Kiril/Yunan benzer harf), kişisel veri ve talimat enjeksiyonu denetimi, Konu Bekçisi, Hakem ipucu sızıntı koruması, 128 bitlik oturum kimliği, IP başına hız sınırı, 20 KB gövde sınırı, güvenlik başlıkları (CSP, nosniff, frame-ancestors none), arayüzde yalnızca `textContent` (XSS yok), dış bağlantılar `noopener noreferrer`. Üretimde `IKIZ_CORS` ile izinli kökenleri kısıtla ve HTTPS arkasında çalıştır.
 
 ## Bilinen sınırlar
 
 - LLM yolu (Claude / Hugging Face) gerçek servislere karşı henüz denenmedi; yalnızca demo modu ve sahte uç nokta test edildi. Hugging Face'te JSON çıktı güvenilirliği ve Türkçe kalite modele göre denenmelidir. Ücretsiz HF hesaplarında aylık kredi yoktur (PRO: aylık 2$).
+- Doğrulanmış kaynak listesi yalnızca Veri Yapıları için var; diğer konularda arama bağlantısı verilir. Rakamla yazılmış telefon ("sıfır beş yüz…") ve kodlanmış (base64) kişisel veri yakalanmaz.
 - *Görev ver* yönlendirmesi anahtar kelimelidir; `kaynak` yalnızca kaynak türü önerir, bağlantı uydurmaz.
 - Eski Streamlit demosu (`app.py`) ve `examples_yks_ayt_matematik/` örnek içerik paketi olarak duruyor; ana ürün değildir.
 - 18 yaş altı için veli onayı akışı yok; destek hattı numaraları (112, ALO 183) yayından önce doğrulanmalı.
