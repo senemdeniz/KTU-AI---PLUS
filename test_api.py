@@ -364,7 +364,7 @@ def test_hesap_kayit_giris_cikis():
     r = a.post("/v2/auth/login", json={"kullanici": ad, "sifre": "gizli-sifre-1"})
     assert r.json()["session_id"] == sid and a.get(f"/v2/sessions/{sid}").json()["profil"]["kullanici"] == ad
     # şifre düz metin saklanmaz
-    satir = store._db().execute("SELECT ozet FROM hesaplar WHERE kullanici=?", (ad,)).fetchone()
+    satir = store.sorgu("SELECT ozet FROM hesaplar WHERE kullanici=?", (ad,))[0]
     assert b"gizli-sifre-1" not in satir[0]
     # başka siteden yazma isteği reddedilir
     yabanci = TC(server.app)   # özel başlık yok: başka bir siteden gelen form ya da fetch gibi

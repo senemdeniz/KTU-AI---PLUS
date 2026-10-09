@@ -115,6 +115,7 @@ def model(monkeypatch):
         monkeypatch.setenv("LLM_API_KEY", "test-anahtari")
         monkeypatch.setenv("LLM_BASE_URL", f"http://127.0.0.1:{s.server_port}/v1")
         monkeypatch.setenv("LLM_MODEL", "test-modeli")
+        monkeypatch.setenv("LLM_YENIDEN_DENEME", "0")            # "hata" modunda testi bekletmesin
         return s
     return ac
 
