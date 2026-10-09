@@ -226,7 +226,50 @@ _DEMO_KAVRAM = {
         _Q("q3", "Ağırlıksız grafta en kısa yolu hangisi bulur?", "BFS; katman katman ilerlediği için ilk ulaştığı yol en kısadır.", ["bfs", "kısa", "katman"]),
     ],
 }
+_DEMO_KAVRAM.update({
+    "g akoru": [
+        _Q("q1", "G akorunda parmaklar hangi tellere ve perdelere basar?", "Klasik G: 2. parmak 6. tel 3. perde, 1. parmak 5. tel 2. perde, 3. parmak 1. tel 3. perde.", ["perde", "tel", "parmak"]),
+        _Q("q2", "Akordaki bir tel ses vermiyorsa ilk neyi kontrol edersin?", "Komşu parmağın o tele değip değmediğini ve parmağın perde telinin hemen arkasına bastığını.", ["değ", "perde", "bas"]),
+        _Q("q3", "G akoruna geçişi hızlandırmak için ne yaparsın?", "Parmakları bir şekil olarak birlikte kaldırıp koymayı yavaş tempoda tekrar ederim.", ["birlikte", "yavaş", "tekrar"]),
+    ],
+    "tirmalama": [
+        _Q("q1", "Aşağı-yukarı tırmalamada el nasıl hareket eder?", "Bilekten gevşek ve sürekli hareket eder; ritim için el hiç durmaz.", ["bilek", "durmaz", "sürekli"]),
+        _Q("q2", "Tırmalarken ritim neden metronomla çalışılır?", "Tempoyu sabit tutmak ve hızlanma/yavaşlamayı fark etmek için.", ["tempo", "sabit", "metronom"]),
+        _Q("q3", "Bazı vuruşlarda tellere dokunmadan geçmek ne işe yarar?", "Ritim kalıbını korurken elin akışını bozmamak için (boşta vuruş).", ["boş", "akış", "kalıp"]),
+    ],
+    "akor gecis": [
+        _Q("q1", "Akor geçişini çalışmanın en etkili yolu nedir?", "Yalnızca iki akor arasında, yavaş tempoda ve belirli bir sürede kaç geçiş yaptığını sayarak çalışmak.", ["iki", "yavaş", "say"]),
+        _Q("q2", "Ortak parmak ne demek, geçişte nasıl yardım eder?", "İki akorda aynı yere basan parmaktır; onu kaldırmadan diğerlerini taşımak geçişi hızlandırır.", ["ortak", "aynı", "kaldır"]),
+        _Q("q3", "Geçiş takılıyorsa tempoyu ne yaparsın?", "Tempoyu düşürür, temiz çalınca küçük adımlarla artırırım.", ["düşür", "temiz", "artır"]),
+    ],
+    "sarkinin yapisi": [
+        _Q("q1", "Bir şarkıda kıta ve nakarat ne demektir?", "Kıta hikâyenin ilerlediği bölüm, nakarat tekrar eden ana bölümdür.", ["kıta", "nakarat", "tekrar"]),
+        _Q("q2", "Şarkıyı çalışırken neden bölümlere ayırırsın?", "Zor bölümü ayrı çalışıp sonra birleştirmek daha hızlı ilerletir.", ["bölüm", "ayrı", "birleştir"]),
+        _Q("q3", "Akor sırasını öğrenmek için ne yaparsın?", "Akorları ölçülere yazar, şarkıyı dinleyerek değişim anlarını işaretlerim.", ["sıra", "dinle", "değiş"]),
+    ],
+    "ritim ve tempo": [
+        _Q("q1", "BPM neyi ölçer?", "Dakikadaki vuruş sayısını, yani tempoyu.", ["dakika", "vuruş", "tempo"]),
+        _Q("q2", "Tempo ne zaman artırılmalı?", "Mevcut tempoda temiz ve hatasız çalabildiğinde, küçük adımlarla.", ["temiz", "hatasız", "küçük"]),
+        _Q("q3", "İlerlemeni nasıl ölçebilirsin?", "Aynı parçayı temiz çalabildiğin en yüksek BPM'i kaydedip zamanla karşılaştırarak.", ["bpm", "kaydet", "karşılaştır"]),
+    ],
+})
 _DEMO_HINTS_Q.update({
+    "G akorunda parmaklar hangi tellere ve perdelere basar?": "Hangi parmak hangi tele, kaçıncı perdeye? İkizine bunu adım adım anlattın mı?",
+    "Akordaki bir tel ses vermiyorsa ilk neyi kontrol edersin?": "Ses vermeyen telin çevresinde ne oluyor? Komşu parmaklara bak.",
+    "G akoruna geçişi hızlandırmak için ne yaparsın?": "Parmakları tek tek mi koyuyorsun, yoksa bir şekil olarak mı?",
+    "Aşağı-yukarı tırmalamada el nasıl hareket eder?": "Hareket nereden geliyor: kol mu, bilek mi? El ne zaman duruyor?",
+    "Tırmalarken ritim neden metronomla çalışılır?": "Metronom olmadan tempoya ne olur?",
+    "Bazı vuruşlarda tellere dokunmadan geçmek ne işe yarar?": "El hiç durmuyorsa, çalmadığın vuruşta ne yapıyor?",
+    "Akor geçişini çalışmanın en etkili yolu nedir?": "Kaç akorla, hangi tempoda ve neyi sayarak çalışıyorsun?",
+    "Ortak parmak ne demek, geçişte nasıl yardım eder?": "İki akorda yerinden hiç oynamayan bir parmak var mı?",
+    "Geçiş takılıyorsa tempoyu ne yaparsın?": "Takılınca hızlanmak mı, yavaşlamak mı işe yarar?",
+    "Bir şarkıda kıta ve nakarat ne demektir?": "Şarkının hangi bölümü tekrar ediyor?",
+    "Şarkıyı çalışırken neden bölümlere ayırırsın?": "Zor bir yer için şarkının tamamını mı çalarsın?",
+    "Akor sırasını öğrenmek için ne yaparsın?": "Akorların ne zaman değiştiğini nasıl fark edersin?",
+    "BPM neyi ölçer?": "Metronomun üzerindeki sayı neyi gösteriyor?",
+    "Tempo ne zaman artırılmalı?": "Hatalı çalarken hızlanmak sana ne kazandırır?",
+    "İlerlemeni nasıl ölçebilirsin?": "Bugünkü tempon ile geçen haftaki temponu nasıl karşılaştırırsın?",
+
     "Bağlı listede elemanlar birbirine nasıl bağlanır?": "Bir düğüm bir sonrakini nasıl bulur? İkizine bunu anlattın mı?",
     "Bağlı listede 5. elemana ulaşmak neden diziden yavaştır?": "Dizide doğrudan atlayabiliyoruz; bağlı listede ne yapmak gerekiyor?",
     "Bağlı listenin başına eleman eklemek neden hızlıdır?": "Başa eklerken hangi işaretçiler değişir? Diğer elemanlara dokunuyor musun?",
