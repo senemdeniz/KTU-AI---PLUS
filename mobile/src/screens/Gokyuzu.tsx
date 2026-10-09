@@ -7,6 +7,7 @@ import { C, s } from '../theme';
 export function Gokyuzu({ gorevVer, ekipAc }: { gorevVer: () => void; ekipAc: () => void }) {
   const { view, hata } = useOturum();
   const [alan, setAlan] = useState(0);
+  const [harita, setHarita] = useState(false);
   if (!view) return null;
   const a = view.alanlar[Math.min(alan, view.alanlar.length - 1)];
   const ik = a.ikiz;
@@ -47,6 +48,18 @@ export function Gokyuzu({ gorevVer, ekipAc }: { gorevVer: () => void; ekipAc: ()
         </View>
       </>)}
       {!ik && <Text style={s.muted}>Bu alanın gökyüzü hazırlanıyor…</Text>}
+      {a.harita && (
+        <View style={s.card}>
+          <Pressable onPress={() => setHarita(!harita)} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <Text style={s.h2}>Yol haritan</Text><Text style={{ color: C.gold, fontWeight: '700' }}>{harita ? 'Gizle' : 'Göster'}</Text>
+          </Pressable>
+          <Text style={s.muted}>{a.hedef?.secilen}</Text>
+          {harita && a.harita.map((x) => (
+            <View key={x.id} style={{ flexDirection: 'row', gap: 10, opacity: x.day > ik!.gun + 1 ? 0.6 : 1 }}>
+              <Text style={{ color: x.done ? C.gold : C.dim, width: 44, fontSize: 12, fontWeight: '700' }}>{x.done ? '★' : '☆'} {x.day}. gün</Text>
+              <Text style={[s.body, { flex: 1, fontSize: 13 }]}>{x.title}</Text>
+            </View>))}
+        </View>)}
       {view.koc && (
         <View style={[s.card2, { padding: 16 }]}>
           <Etiket ajan="Rehber" />

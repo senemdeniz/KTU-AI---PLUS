@@ -20,6 +20,8 @@ export function Onboarding() {
   const [zaman, setZaman] = useState<'sabah' | 'ogle' | 'aksam'>('aksam');
   const [tarihOn, setTarihOn] = useState(false);
   const [tarih, setTarih] = useState('');
+  const [hizli, setHizli] = useState('');
+  const [hizliAlan, setHizliAlan] = useState<'akademik' | 'hobi'>('akademik');
   const [hata, setHata] = useState<string | null>(null);
   const [yukleniyor, setYukleniyor] = useState(false);
 
@@ -32,15 +34,30 @@ export function Onboarding() {
     } catch (e: any) { setHata(e.message); setYukleniyor(false); }
   };
 
+  const hizliBaslat = async () => {
+    setYukleniyor(true); setHata(null);
+    try {
+      const r = await api.ac({ ad, akademik: hizliAlan === 'akademik' ? hizli.trim() : null, hobi: hizliAlan === 'hobi' ? hizli.trim() : null,
+        dakika: 30, zaman: 'aksam', son_tarihler: [] });
+      baslat(r.session_id);
+    } catch (e: any) { setHata(e.message); setYukleniyor(false); }
+  };
+
   return (
     <ScrollView contentContainerStyle={[s.pad, { paddingTop: 40 }]} keyboardShouldPersistTaps="handled">
       <View style={s.row}><Spark size={22} /><Text style={{ color: C.gold, fontWeight: '800', fontSize: 18 }}>İkiz</Text></View>
 
       {adim === 0 && (<>
-        <Text style={s.h1}>Gökyüzünde yalnız değilsin.</Text>
-        <Text style={s.muted}>Bir ekip senin için çalışır, ikizin senin istikrarlı halini taşır. İkiz bir yapay zekâ karakteridir.</Text>
+        <Text style={s.h1}>Ne öğrenmek istiyorsun?</Text>
+        <Text style={s.muted}>Bir konu yaz; ekip dakikalar içinde sana 21 günlük yol haritası çıkarsın. İkizin bir yapay zekâ karakteridir.</Text>
         <TextInput style={s.input} value={ad} onChangeText={setAd} placeholder="Adın" placeholderTextColor={C.faint} maxLength={40} />
-        <Btn onPress={() => setAdim(1)} disabled={!ad.trim()}>Başla</Btn>
+        <TextInput style={s.input} value={hizli} onChangeText={setHizli} placeholder="Örn. Kalkülüs I · Türev, Gitar, İspanyolca…"
+          placeholderTextColor={C.faint} maxLength={80} />
+        <View style={s.row}><Chip label="Akademik" on={hizliAlan === 'akademik'} onPress={() => setHizliAlan('akademik')} />
+          <Chip label="Hobi" on={hizliAlan === 'hobi'} onPress={() => setHizliAlan('hobi')} /></View>
+        <Hata metin={hata} />
+        <Btn onPress={hizliBaslat} disabled={!ad.trim() || !hizli.trim() || yukleniyor}>{yukleniyor ? 'Ekip çağrılıyor…' : 'Ekibi çağır'}</Btn>
+        <Btn kind="ghost" onPress={() => setAdim(1)}>İki alan ve daha fazla ayar</Btn>
       </>)}
 
       {adim === 1 && (<>

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { OturumSaglayici, useOturum } from './src/oturum';
 import { Nav, Sekme } from './src/ui';
 import { Onboarding } from './src/screens/Onboarding';
@@ -39,6 +39,12 @@ function Uygulama() {
           <Text style={{ fontSize: 11, color: C.muted, fontWeight: '600' }}>Demo modu · ajanlar hazır içerikle çalışıyor</Text>
         </View>)}
       <View style={{ flex: 1 }}>{ic}</View>
+      {nav && (sekme === 'bugun' || sekme === 'ikizin') && (
+        <Pressable onPress={() => setSheet(true)} accessibilityLabel="Ekibe görev ver" accessibilityRole="button"
+          style={{ position: 'absolute', right: 16, bottom: 96, height: 48, paddingHorizontal: 16, borderRadius: 24, backgroundColor: C.gold,
+            justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 8, elevation: 6 }}>
+          <Text style={{ color: C.bg, fontWeight: '800' }}>✦ Ekibe sor</Text>
+        </Pressable>)}
       {nav && <Nav aktif={sekme} onSec={setSekme} />}
       <GorevVer acik={sheet} kapat={() => setSheet(false)} />
     </View>

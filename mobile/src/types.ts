@@ -18,6 +18,7 @@ export interface AlanView {
   hedef?: { secilen: string; gerekce: string; olcut: string; sure: number; adaylar: { title: string; fit_score: number; reason: string }[] };
   ikiz?: Ikiz;
   haftalar?: { week: number; theme: string; milestone: string }[];
+  harita?: { id: string; day: number; title: string; type: Gorev['type']; minutes: number; done: boolean }[];
 }
 export interface AjanBilgi { ad: string; rol: string; tur: string; yetki: string; son: { tur: string; mesaj: string } | null }
 export interface Oneri {

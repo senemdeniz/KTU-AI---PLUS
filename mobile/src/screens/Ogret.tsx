@@ -4,6 +4,7 @@ import { api } from '../api';
 import { useOturum } from '../oturum';
 import { Btn, Etiket, Hata } from '../ui';
 import { C, s } from '../theme';
+import { dinle, sesVar } from '../ses';
 import type { SinavMadde } from '../types';
 
 const ROMEN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII', 'XIII', 'XIV', 'XV', 'XVI', 'XVII', 'XVIII', 'XIX', 'XX'];
@@ -17,6 +18,17 @@ export function Ogret({ alan, geri }: { alan: 'akademik' | 'hobi'; geri: () => v
   const [metin, setMetin] = useState('');
   const [uyari, setUyari] = useState<string | null>(null);
   const [sinav, setSinav] = useState(false);
+  const [dinliyor, setDinliyor] = useState(false);
+  const [gecici, setGecici] = useState('');
+  const durdur = React.useRef<null | (() => void)>(null);
+  const sesBaslat = () => {
+    setUyari(null);
+    setDinliyor(true);
+    durdur.current = dinle(
+      (kesin, g) => { if (kesin) setMetin((m) => (m ? m + ' ' : '') + kesin.trim()); setGecici(g); },
+      (h) => { setDinliyor(false); setGecici(''); if (h) setUyari(h); });
+  };
+  const sesDurdur = () => { durdur.current?.(); setDinliyor(false); setGecici(''); };
   if (!view || !sid) return null;
   const og = view.ogret;
   const cumleler = og.alan === alan ? og.cumleler : [];
@@ -27,7 +39,7 @@ export function Ogret({ alan, geri }: { alan: 'akademik' | 'hobi'; geri: () => v
     const r = await calistir(() => api.ogretEkle(sid, metin, alan));
     if (!r) return;
     if (r.ok) { setMetin(''); setUyari(r.uyarilar?.length ? r.uyarilar.map((u: any) => u.mesaj).join(' ') : null); }
-    else setUyari(r.mesaj);
+    else setUyari((r.engel === 'konu_disi' ? 'Konu Bekçisi: ' : '') + r.mesaj);
   };
   const sinava = async () => {
     const r = await calistir(() => api.sinav(sid));
@@ -58,6 +70,11 @@ export function Ogret({ alan, geri }: { alan: 'akademik' | 'hobi'; geri: () => v
       {uyari && <View style={[s.card2, { backgroundColor: C.dangerBg }]}><Text style={{ color: C.danger, fontSize: 13, lineHeight: 18 }}>{uyari}</Text></View>}
       <TextInput style={[s.input, { minHeight: 110, textAlignVertical: 'top' }]} multiline value={metin} onChangeText={setMetin} maxLength={1500}
         placeholder="Konuyu bir arkadaşına anlatır gibi yaz…" placeholderTextColor={C.faint} />
+      {sesVar() ? (
+        <Btn kind={dinliyor ? 'gold' : 'ghost'} onPress={dinliyor ? sesDurdur : sesBaslat}>{dinliyor ? '■ Dinliyorum… durdurmak için dokun' : '🎙️ Sesle anlat'}</Btn>
+      ) : <Text style={s.small}>Sesli anlatım şimdilik web sürümünde (Chrome/Safari) çalışır.</Text>}
+      {!!gecici && <Text style={[s.muted, { fontStyle: 'italic' }]}>{gecici}</Text>}
+      {dinliyor && <Text style={s.small}>Konuş, bitince durdur; yazıya dökülen metni düzenleyip ekleyebilirsin. Tarayıcının ses tanıma servisi sesini işleyebilir; kişisel bilgi söyleme.</Text>}
       <Btn kind="soft" onPress={ekle} disabled={mesgul || !metin.trim()}>Cümleleri ekle</Btn>
       <Btn onPress={sinava} disabled={mesgul || cumleler.length === 0}>{mesgul ? 'İkiz sınavda…' : 'İkizini sınava sok'}</Btn>
     </ScrollView>

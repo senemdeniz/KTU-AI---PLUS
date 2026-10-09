@@ -8,6 +8,8 @@ import { C, s } from '../theme';
 export function Ikizin({ ogretAc }: { ogretAc: (a: 'akademik' | 'hobi') => void }) {
   const { view, sid, calistir, bitir, mesgul, hata } = useOturum();
   const [alan, setAlan] = useState(0);
+  const [gun, setGun] = useState(3);
+  const [oran, setOran] = useState(25);
   if (!view || !sid) return null;
   const a = view.alanlar[Math.min(alan, view.alanlar.length - 1)];
   const ik = a.ikiz;
@@ -36,12 +38,14 @@ export function Ikizin({ ogretAc }: { ogretAc: (a: 'akademik' | 'hobi') => void 
         <Btn onPress={() => ogretAc(a.alan)}>İkizine öğret</Btn>
       </View>
       <View style={s.card}>
-        <Text style={s.h2}>Demo</Text>
-        <Text style={s.muted}>Jüri için günleri hızlandır: ekibin devreye girmesini izle.</Text>
-        <View style={s.row}>
-          <Btn kind="soft" style={{ flex: 1 }} disabled={mesgul} onPress={() => calistir(() => api.atla(sid, 5, 0.9))}>5 gün iyi</Btn>
-          <Btn kind="soft" style={{ flex: 1 }} disabled={mesgul} onPress={() => calistir(() => api.atla(sid, 5, 0.15))}>5 gün kopuk</Btn>
-        </View>
+        <Text style={s.h2}>Canlı demo kontrolü</Text>
+        <Text style={s.muted}>İlerlemeyi sen belirle; ekip anında tepki verir. Kaç gün geçsin, o günlerde planın ne kadarını yapmış olasın?</Text>
+        <Text style={s.small}>Geçen gün</Text>
+        <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>{[1, 2, 3, 5, 7].map((g) => <Chip key={g} label={`${g} gün`} on={gun === g} onPress={() => setGun(g)} />)}</View>
+        <Text style={s.small}>Planın ne kadarını yaptın?</Text>
+        <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>{[0, 25, 50, 75, 100].map((o) => <Chip key={o} label={`%${o}`} on={oran === o} onPress={() => setOran(o)} />)}</View>
+        <Btn disabled={mesgul || view.durum !== 'hazir'} onPress={() => { calistir(() => api.atla(sid, gun, oran / 100)); }}>{gun} gün ilerlet (%{oran} yaptım)</Btn>
+        <Text style={s.small}>Günü tek tek yönetmek için Bugün sekmesinde görevleri işaretleyip "Günü bitir"e bas.</Text>
       </View>
       <Btn kind="ghost" onPress={async () => { await calistir(() => api.oturumSil(sid)); bitir(); }}>Verilerimi sil ve çık</Btn>
       <Text style={s.small}>Tüm verilerin sunucudan silinir. Model: {view.demo ? 'demo modu' : view.model}</Text>
