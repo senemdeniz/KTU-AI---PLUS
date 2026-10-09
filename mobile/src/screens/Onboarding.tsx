@@ -1,141 +1,81 @@
 import React, { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, View } from 'react-native';
-import * as DocumentPicker from 'expo-document-picker';
-import { api, getBaseUrl, setBaseUrl } from '../api';
-import { Button, Chip } from '../components/ui';
+import { ScrollView, Text, TextInput, View } from 'react-native';
+import { api } from '../api';
+import { useOturum } from '../oturum';
+import { Btn, Chip, Hata, Spark } from '../ui';
 import { C, s } from '../theme';
-import type { SessionView } from '../types';
 
-const DEMO = {
-  name: 'Elif',
-  cv: 'Bilgisayar mühendisliği 3. sınıf öğrencisi. Yaz stajında Python ile Excel raporlarını otomatikleştiren betikler yazdı. Temel SQL biliyor, veri bilimine ilgi duyuyor.',
-  hobbies: 'satranç, fotoğrafçılık',
-  goals: 'veri bilimine geçmek\nİngilizce teknik sunum yapabilmek',
-  minutes: 30,
-};
+const GUNLER = [15, 30, 45, 60];
+const ZAMANLAR: [string, 'sabah' | 'ogle' | 'aksam'][] = [['Sabah', 'sabah'], ['Öğlen', 'ogle'], ['Akşam', 'aksam']];
 
-export function Onboarding({ onDone }: { onDone: (v: SessionView) => void }) {
-  const [name, setName] = useState('');
-  const [cv, setCv] = useState('');
-  const [hobbies, setHobbies] = useState('');
-  const [goals, setGoals] = useState('');
-  const [minutes, setMinutes] = useState(30);
-  const [server, setServer] = useState(getBaseUrl());
-  const [showServer, setShowServer] = useState(false);
-  const [busy, setBusy] = useState<'pdf' | 'go' | null>(null);
-  const [error, setError] = useState<string | null>(null);
+export function Onboarding() {
+  const { baslat } = useOturum();
+  const [adim, setAdim] = useState(0);
+  const [ad, setAd] = useState('Elif');
+  const [akOn, setAkOn] = useState(true);
+  const [hbOn, setHbOn] = useState(true);
+  const [ak, setAk] = useState('Kalkülüs I · Türev');
+  const [hb, setHb] = useState('Gitar');
+  const [dk, setDk] = useState(30);
+  const [zaman, setZaman] = useState<'sabah' | 'ogle' | 'aksam'>('aksam');
+  const [tarihOn, setTarihOn] = useState(false);
+  const [tarih, setTarih] = useState('');
+  const [hata, setHata] = useState<string | null>(null);
+  const [yukleniyor, setYukleniyor] = useState(false);
 
-  const fillDemo = () => {
-    setName(DEMO.name); setCv(DEMO.cv); setHobbies(DEMO.hobbies); setGoals(DEMO.goals); setMinutes(DEMO.minutes);
-  };
-
-  const pickPdf = async () => {
-    setError(null);
-    const r = await DocumentPicker.getDocumentAsync({ type: 'application/pdf', copyToCacheDirectory: true });
-    if (r.canceled || !r.assets?.[0]) return;
-    setBusy('pdf');
+  const bitir = async () => {
+    setYukleniyor(true); setHata(null);
     try {
-      setBaseUrl(server);
-      const { text } = await api.parseCv(r.assets[0]);
-      setCv(text);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const submit = async () => {
-    setError(null);
-    if (!cv.trim() && !goals.trim()) return setError('En azından CV\'ni ya da hedeflerini yazmalısın.');
-    setBusy('go');
-    try {
-      setBaseUrl(server);
-      const v = await api.createSession({
-        name: name.trim() || 'Kullanıcı',
-        cv_text: cv,
-        hobbies: hobbies.split(',').map((h) => h.trim()).filter(Boolean),
-        goals: goals.split('\n').map((g) => g.trim()).filter(Boolean),
-        daily_minutes: minutes,
-      });
-      onDone(v);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(null);
-    }
+      const sonTarihler = tarihOn && /^\d{4}-\d{2}-\d{2}$/.test(tarih) ? [{ baslik: 'Vize', tarih }] : [];
+      const r = await api.ac({ ad, akademik: akOn ? ak.trim() : null, hobi: hbOn ? hb.trim() : null, dakika: dk, zaman, son_tarihler: sonTarihler });
+      baslat(r.session_id);
+    } catch (e: any) { setHata(e.message); setYukleniyor(false); }
   };
 
   return (
-    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
-        <View style={{ gap: 8, marginTop: 8 }}>
-          <Text style={s.eyebrow}>İkiz</Text>
-          <Text style={s.h1}>Seni tanıyalım</Text>
-          <Text style={s.muted}>
-            CV'ni, hobilerini ve hedeflerini ver. Ajan sana en uygun gelişim hedefini seçsin ve seninle birlikte büyüyecek bir ikiz oluştursun.
-          </Text>
+    <ScrollView contentContainerStyle={[s.pad, { paddingTop: 40 }]} keyboardShouldPersistTaps="handled">
+      <View style={s.row}><Spark size={22} /><Text style={{ color: C.gold, fontWeight: '800', fontSize: 18 }}>İkiz</Text></View>
+
+      {adim === 0 && (<>
+        <Text style={s.h1}>Gökyüzünde yalnız değilsin.</Text>
+        <Text style={s.muted}>Bir ekip senin için çalışır, ikizin senin istikrarlı halini taşır. İkiz bir yapay zekâ karakteridir.</Text>
+        <TextInput style={s.input} value={ad} onChangeText={setAd} placeholder="Adın" placeholderTextColor={C.faint} maxLength={40} />
+        <Btn onPress={() => setAdim(1)} disabled={!ad.trim()}>Başla</Btn>
+      </>)}
+
+      {adim === 1 && (<>
+        <Text style={s.small}>1 / 2</Text>
+        <Text style={s.h1}>Neye çalışacaksın?</Text>
+        <View style={s.card}>
+          <View style={s.row}><Chip label="Akademik" on={akOn} onPress={() => (hbOn || !akOn) && setAkOn(!akOn)} /></View>
+          {akOn && <TextInput style={s.input} value={ak} onChangeText={setAk} placeholder="Ders · konu" placeholderTextColor={C.faint} maxLength={80} />}
+          {akOn && <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+            {['Vize', 'Final', 'Ödev/proje', 'Tez'].map((x) => <Chip key={x} label={x} />)}</View>}
         </View>
-
-        <Button title="Demo profiliyle doldur" kind="secondary" onPress={fillDemo} />
-
-        <View>
-          <Text style={s.label}>Adın</Text>
-          <TextInput style={s.input} value={name} onChangeText={setName} placeholder="ör. Elif" placeholderTextColor={C.faint} />
+        <View style={s.card}>
+          <View style={s.row}><Chip label="Hobiler" on={hbOn} onPress={() => (akOn || !hbOn) && setHbOn(!hbOn)} /></View>
+          {hbOn && <TextInput style={s.input} value={hb} onChangeText={setHb} placeholder="Örn. Gitar" placeholderTextColor={C.faint} maxLength={80} />}
         </View>
+        <Btn onPress={() => setAdim(2)} disabled={(akOn && !ak.trim()) || (hbOn && !hb.trim())}>Devam</Btn>
+      </>)}
 
-        <View>
-          <Text style={s.label}>CV'n</Text>
-          <TextInput
-            style={[s.input, { minHeight: 120, textAlignVertical: 'top' }]}
-            value={cv}
-            onChangeText={setCv}
-            multiline
-            placeholder="CV metnini yapıştır ya da PDF yükle"
-            placeholderTextColor={C.faint}
-          />
-          <Button title="PDF olarak yükle" kind="ghost" onPress={pickPdf} loading={busy === 'pdf'} style={{ alignSelf: 'flex-start', minHeight: 40, paddingHorizontal: 0 }} />
+      {adim === 2 && (<>
+        <Text style={s.small}>2 / 2</Text>
+        <Text style={s.h1}>Günde ne kadar?</Text>
+        <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+          {GUNLER.map((g) => <Chip key={g} label={`${g} dk`} on={dk === g} onPress={() => setDk(g)} />)}
         </View>
-
-        <View>
-          <Text style={s.label}>Hobilerin (virgülle ayır)</Text>
-          <TextInput style={s.input} value={hobbies} onChangeText={setHobbies} placeholder="satranç, fotoğrafçılık" placeholderTextColor={C.faint} />
+        <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+          {ZAMANLAR.map(([l, k]) => <Chip key={k} label={l} on={zaman === k} onPress={() => setZaman(k)} />)}
         </View>
-
-        <View>
-          <Text style={s.label}>Geliştirmek istediğin konular (her satıra bir tane)</Text>
-          <TextInput
-            style={[s.input, { minHeight: 84, textAlignVertical: 'top' }]}
-            value={goals}
-            onChangeText={setGoals}
-            multiline
-            placeholder={'veri bilimine geçmek\nİngilizce sunum yapabilmek'}
-            placeholderTextColor={C.faint}
-          />
-        </View>
-
-        <View>
-          <Text style={s.label}>Günde ayırabileceğin süre</Text>
-          <View style={[s.row, { flexWrap: 'wrap' }]}>
-            {[15, 30, 45, 60, 90].map((m) => (
-              <Chip key={m} label={`${m} dk`} active={minutes === m} onPress={() => setMinutes(m)} />
-            ))}
-          </View>
-        </View>
-
-        <Text style={[s.muted, { fontSize: 12 }]}>Verilerin yalnızca bu oturumda tutulur ve hedef seçimi dışında kullanılmaz.</Text>
-
-        {error && <Text style={{ color: C.red, fontSize: 14 }}>{error}</Text>}
-
-        <Button title="İkizimi oluştur" onPress={submit} loading={busy === 'go'} />
-
-        <View style={{ gap: 8 }}>
-          <Button title={showServer ? 'Sunucu ayarını gizle' : 'Sunucu ayarı'} kind="ghost" onPress={() => setShowServer(!showServer)} style={{ minHeight: 36 }} />
-          {showServer && (
-            <TextInput style={s.input} value={server} onChangeText={setServer} autoCapitalize="none" autoCorrect={false} keyboardType="url" />
-          )}
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        {akOn && <View style={s.card}>
+          <Chip label="Yaklaşan sınav / teslim ekle" on={tarihOn} onPress={() => setTarihOn(!tarihOn)} />
+          {tarihOn && <TextInput style={s.input} value={tarih} onChangeText={setTarih} placeholder="YYYY-AA-GG (örn. 2026-10-16)" placeholderTextColor={C.faint} maxLength={10} />}
+        </View>}
+        <Hata metin={hata} />
+        <Btn onPress={bitir} disabled={yukleniyor}>{yukleniyor ? 'Ekip çağrılıyor…' : 'Ekibi çağır'}</Btn>
+        <Btn kind="ghost" onPress={() => setAdim(1)}>Geri</Btn>
+      </>)}
+    </ScrollView>
   );
 }

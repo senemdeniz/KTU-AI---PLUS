@@ -1,64 +1,20 @@
-import { Platform, StyleSheet } from 'react-native';
-import type { Risk, TaskType } from './types';
+import { StyleSheet } from 'react-native';
 
 export const C = {
-  paper: '#fbfaf7',
-  sand: '#f1efe9',
-  line: '#e2ded5',
-  ink: '#1b1f2a',
-  muted: '#5d6472',
-  faint: '#8a929c',
-  blue: '#3b5bdb',
-  blueSoft: '#e8edff',
-  navy: '#14213d',
-  ideal: '#9aa3ad',
-  green: '#1d6b3f',
-  greenSoft: '#e3f4ea',
-  amber: '#8a5a0b',
-  amberSoft: '#fdf1dc',
-  red: '#9b2c22',
-  redSoft: '#fbe3e1',
-  white: '#ffffff',
+  bg: '#0b1026', card: '#10162f', card2: '#141b3a', line: '#1f2850', line2: '#2a3363', nav: '#0e1430',
+  gold: '#f5d78e', blue: '#8ea2ff', text: '#eef0fa', soft: '#b8bfe6', muted: '#a9b0d6', dim: '#8f97c4', faint: '#5b6699',
+  danger: '#ffb3a7', dangerBg: '#2b1a25', ok: '#9be0b4', okBg: '#12281f', warnBg: '#2b2410',
 };
-
-export const serif = Platform.select({ ios: 'Georgia', android: 'serif', default: 'Georgia, serif' });
-
-export const RISK: Record<Risk, { label: string; fg: string; bg: string }> = {
-  momentum: { label: 'Momentum', fg: C.green, bg: C.greenSoft },
-  steady: { label: 'Dengeli', fg: C.blue, bg: C.blueSoft },
-  slipping: { label: 'Kayıyor', fg: C.amber, bg: C.amberSoft },
-  at_risk: { label: 'Risk altında', fg: C.red, bg: C.redSoft },
-};
-
-export const TYPE_TR: Record<TaskType, string> = {
-  learn: 'Öğren',
-  practice: 'Uygula',
-  teach: 'İkizine öğret',
-  reflect: 'Değerlendir',
-};
-
-export const skillLabel = (s: string) => s.replace(/_/g, ' ').replace(/^./, (c) => c.toLocaleUpperCase('tr'));
-
 export const s = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: C.paper },
-  scroll: { padding: 20, paddingBottom: 48, gap: 16 },
-  eyebrow: { fontSize: 12, letterSpacing: 1.6, fontWeight: '700', color: C.blue, textTransform: 'uppercase' },
-  h1: { fontFamily: serif, fontSize: 34, fontWeight: '600', color: C.ink, lineHeight: 40 },
-  h2: { fontFamily: serif, fontSize: 24, fontWeight: '600', color: C.ink, lineHeight: 30 },
-  h3: { fontSize: 17, fontWeight: '700', color: C.ink },
-  body: { fontSize: 16, color: C.ink, lineHeight: 23 },
-  muted: { fontSize: 14, color: C.muted, lineHeight: 20 },
-  card: { backgroundColor: C.white, borderRadius: 18, padding: 16, borderWidth: 1, borderColor: C.line, gap: 10 },
-  label: { fontSize: 13, fontWeight: '600', color: C.muted, marginBottom: 6 },
-  input: {
-    backgroundColor: C.white,
-    borderWidth: 1,
-    borderColor: C.line,
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 16,
-    color: C.ink,
-  },
+  screen: { flex: 1, backgroundColor: C.bg },
+  pad: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 24, gap: 14 },
+  h1: { color: C.text, fontSize: 28, fontWeight: '800', letterSpacing: -0.5 },
+  h2: { color: C.text, fontSize: 18, fontWeight: '700' },
+  body: { color: C.text, fontSize: 14, lineHeight: 20 },
+  muted: { color: C.muted, fontSize: 13, lineHeight: 18 },
+  small: { color: C.muted, fontSize: 12 },
+  card: { backgroundColor: C.card, borderColor: C.line, borderWidth: 1, borderRadius: 24, padding: 16, gap: 10 },
+  card2: { backgroundColor: C.card2, borderRadius: 18, padding: 14, gap: 6 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  input: { backgroundColor: C.card2, borderColor: C.line2, borderWidth: 1, borderRadius: 16, color: C.text, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15 },
 });
