@@ -370,17 +370,35 @@ def provider() -> str | None:
     return None
 
 
-def anthropic_modeli() -> str:
-    return os.environ.get("ANTHROPIC_MODEL") or MODEL
+# Ajan başına model: kalite gerektiren ve seyrek çağrılan ajanlar büyük modelde, sık çağrılan kısa işler küçük ve hızlı
+# modelde çalışır. Böylece hem cevaplar hızlanır hem de ücretsiz katmanın dakikalık sınırına daha az takılınır.
+BUYUK_MODEL_AJANLARI = {"Haritacı", "Kutup Yıldızı", "Yörüngeci", "Kaşif", "Hakem"}
 
 
-def model_name() -> str:
+def katman(ajan: str | None) -> str:
+    return "buyuk" if ajan is None or ajan in BUYUK_MODEL_AJANLARI else "hizli"
+
+
+def anthropic_modeli(ajan: str | None = None) -> str:
+    buyuk = os.environ.get("ANTHROPIC_MODEL") or MODEL
+    return buyuk if katman(ajan) == "buyuk" else (os.environ.get("ANTHROPIC_MODEL_HIZLI") or buyuk)
+
+
+def model_name(ajan: str | None = None) -> str:
+    """Ajanın kullandığı model. Ajan verilmezse büyük (varsayılan) model."""
     p = provider()
     if p == "anthropic":
-        return anthropic_modeli()
+        return anthropic_modeli(ajan)
     if p == "openai_compat":
-        return os.environ.get("LLM_MODEL") or os.environ.get("HF_MODEL") or "openai/gpt-oss-120b"
+        buyuk = os.environ.get("LLM_MODEL") or os.environ.get("HF_MODEL") or "openai/gpt-oss-120b"
+        return buyuk if katman(ajan) == "buyuk" else (os.environ.get("LLM_MODEL_HIZLI") or buyuk)
     return "demo"
+
+
+def modeller() -> dict:
+    """Arayüz ve /health için: hangi ajan hangi modeli kullanıyor."""
+    y = yetenekler()
+    return {"buyuk": model_name(), "hizli": model_name("Rehber"), "gorsel": y["gorsel_model"], "ses": y["ses_model"]}
 
 
 def _json_cikar(text: str) -> dict:
@@ -472,8 +490,7 @@ def _cevap_metni(data: dict) -> str:
     return icerik
 
 
-def _openai_compat(system: str, payload: dict, max_tokens: int) -> str:
-    model = model_name()
+def _openai_compat(system: str, payload: dict, max_tokens: int, model: str) -> str:
     govde = {"model": model, "temperature": 0.3, "max_tokens": max(max_tokens, 1024),
              "messages": [{"role": "system", "content": system},
                           {"role": "user", "content": json.dumps(payload, ensure_ascii=False)}]}
@@ -484,13 +501,13 @@ def _openai_compat(system: str, payload: dict, max_tokens: int) -> str:
     return _cevap_metni(data)
 
 
-def _anthropic_mesaj(system: str, icerik, max_tokens: int) -> str:
+def _anthropic_mesaj(system: str, icerik, max_tokens: int, model: str | None = None) -> str:
     try:
         import anthropic
     except ModuleNotFoundError as e:
         raise LLMError("anthropic paketi kurulu değil: python3 -m pip install anthropic") from e
     try:
-        msg = anthropic.Anthropic().messages.create(model=anthropic_modeli(), max_tokens=max_tokens, system=system,
+        msg = anthropic.Anthropic().messages.create(model=model or anthropic_modeli(), max_tokens=max_tokens, system=system,
                                                     messages=[{"role": "user", "content": icerik}])
     except Exception as e:  # noqa: BLE001
         kod = getattr(e, "status_code", None)
@@ -498,22 +515,24 @@ def _anthropic_mesaj(system: str, icerik, max_tokens: int) -> str:
     return "".join(b.text for b in msg.content if b.type == "text")
 
 
-def llm_json(system: str, payload: dict, max_tokens: int = 2000) -> dict:
-    """System prompt + JSON girdi → JSON çıktı. Sağlayıcı yoksa demo içerik döner; çağrı başarısızsa LLMError."""
+def llm_json(system: str, payload: dict, max_tokens: int = 2000, ajan: str | None = None) -> dict:
+    """System prompt + JSON girdi → JSON çıktı. `ajan` hangi modelin kullanılacağını belirler (bkz. katman).
+    Sağlayıcı yoksa demo içerik döner; çağrı başarısızsa LLMError."""
     p = provider()
     if p is None:
         return _mock(system, payload)
+    model = model_name(ajan)
     try:
         for deneme in range(2):                     # bozuk JSON için bir kez daha dene
-            text = (_anthropic_mesaj(system, json.dumps(payload, ensure_ascii=False), max_tokens) if p == "anthropic"
-                    else _openai_compat(system, payload, max_tokens))
+            text = (_anthropic_mesaj(system, json.dumps(payload, ensure_ascii=False), max_tokens, model) if p == "anthropic"
+                    else _openai_compat(system, payload, max_tokens, model))
             try:
                 return _json_cikar(text)
             except ValueError:
                 if deneme == 1:
                     raise LLMError("model geçerli JSON döndürmedi") from None
     except LLMError as e:
-        log.warning("Model çağrısı başarısız (%s): %s", model_name(), e)   # anahtar zaten maskeli
+        log.warning("Model çağrısı başarısız (%s, %s): %s", ajan or "genel", model, e)   # anahtar zaten maskeli
         raise
     raise LLMError("model geçerli JSON döndürmedi")
 
@@ -687,7 +706,7 @@ def _liste(d: dict, anahtar: str) -> list:
 
 def extract_profile(name: str, cv_text: str, hobbies: list[str], goals: list[str], daily_minutes: int) -> Profile:
     out = llm_json(PROFILE_EXTRACTOR, {"name": name, "cv_text": cv_text, "hobbies": hobbies,
-                                       "goals": goals, "daily_minutes": daily_minutes})
+                                       "goals": goals, "daily_minutes": daily_minutes}, ajan="Astronom")
     out["name"] = name or out.get("name", "Kullanıcı")
     out["daily_minutes"] = daily_minutes
     out.setdefault("constraints", [])
@@ -699,18 +718,18 @@ def is_mock() -> bool:
 
 
 def select_goal(profile: Profile) -> GoalDecision:
-    out = llm_json(GOAL_SELECTOR, asdict(profile))
+    out = llm_json(GOAL_SELECTOR, asdict(profile), ajan="Kutup Yıldızı")
     out["candidates"] = [_sinif(GoalCandidate, c) for c in _liste(out, "candidates")]
     return _sinif(GoalDecision, out)
 
 
 def build_roadmap(profile: Profile, goal: GoalDecision) -> Roadmap:
-    out = llm_json(ROADMAP_PLANNER, {"profile": asdict(profile), "goal": asdict(goal)}, max_tokens=6000)
+    out = llm_json(ROADMAP_PLANNER, {"profile": asdict(profile), "goal": asdict(goal)}, max_tokens=6000, ajan="Haritacı")
     return Roadmap(weeks=_liste(out, "weeks"), tasks=[_sinif(Task, t) for t in _liste(out, "tasks")])
 
 
 def coach_feedback(state: TwinState) -> dict:
-    out = llm_json(FEEDBACK_COACH, {"state": twin_snapshot(state), "recent_events": state.log[-5:]})
+    out = llm_json(FEEDBACK_COACH, {"state": twin_snapshot(state), "recent_events": state.log[-5:]}, ajan="Rehber")
     if out.get("mode") not in ("momentum", "steady", "slipping", "at_risk") or not isinstance(out.get("message"), str):
         raise LLMError("Rehber çıktısında mode/message yok")
     eylem = out.get("action")
@@ -724,7 +743,7 @@ def twin_talk(state: TwinState, roadmap: Roadmap, user_msg: str, mode: str = "ch
     learned = [t.title for t in roadmap.tasks if t.done]
     return llm_json(TWIN_VOICE, {"mode": mode, "twin_skills": state.real.skills,
                                  "learned_tasks": learned[-10:], "streak": state.streak,
-                                 "user_message": user_msg})
+                                 "user_message": user_msg}, ajan="İkiz")
 
 
 def maybe_replan(state: TwinState, roadmap: Roadmap, goal: GoalDecision, user_reason: str | None = None) -> dict | None:
@@ -734,7 +753,7 @@ def maybe_replan(state: TwinState, roadmap: Roadmap, goal: GoalDecision, user_re
     remaining = [asdict(t) for t in roadmap.tasks if t.day > state.day]
     out = llm_json(REPLANNER, {"goal": asdict(goal), "state": twin_snapshot(state),
                                "recent_events": state.log[-7:], "remaining_tasks": remaining,
-                               "user_reason": user_reason})
+                               "user_reason": user_reason}, ajan="Yörüngeci")
     if "updated_tasks" in out:
         yeni = [_sinif(Task, t) for t in _liste(out, "updated_tasks")]
         roadmap.tasks = [t for t in roadmap.tasks if t.day <= state.day] + yeni
@@ -809,7 +828,7 @@ def gorsel_json(system: str, metin: str, veri_b64: str, mime: str, max_tokens: i
         text = _anthropic_mesaj(system, [{"type": "image", "source": {"type": "base64", "media_type": mime, "data": veri_b64}},
                                          {"type": "text", "text": metin}], max_tokens)
     else:
-        model = os.environ.get("LLM_VISION_MODEL") or model_name()
+        model = os.environ.get("LLM_VISION_MODEL") or model_name("İkiz")
         govde = {"model": model, "temperature": 0.2, "max_tokens": max(max_tokens, 1024),
                  "messages": [{"role": "system", "content": system}, {"role": "user", "content": [
                      {"type": "text", "text": metin}, {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{veri_b64}"}}]}]}

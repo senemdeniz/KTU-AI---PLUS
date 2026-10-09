@@ -57,7 +57,7 @@ def denetle(konu: str, metin: str) -> dict:
     if ia.is_mock():
         return _demo(konu, metin)
     try:
-        out = ia.llm_json(BEKCI, {"topic": konu, "text": metin}, max_tokens=300)
+        out = ia.llm_json(BEKCI, {"topic": konu, "text": metin}, max_tokens=300, ajan="Konu Bekçisi")
         return {"ilgili": out.get("ilgili") is True or str(out.get("ilgili")).strip().lower() == "true", "neden": str(out.get("neden", ""))[:240], "kaynak": "llm"}
     except ia.HATALAR:
         return {"ilgili": False, "kaynak": "hata",
