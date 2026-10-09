@@ -229,10 +229,14 @@ def ogret_sil(sid: str):
     return {"ok": True}
 
 
+class SinavIstek(BaseModel):
+    gorev_id: str | None = Field(default=None, max_length=40)
+
+
 @app.post("/v2/sessions/{sid}/teach/exam")
-def ogret_sinav(sid: str):
+def ogret_sinav(sid: str, r: SinavIstek | None = None):
     _var(sid)
-    return g.ogret_sinav(sid)
+    return g.ogret_sinav(sid, r.gorev_id if r else None)
 
 
 @app.post("/v2/sessions/{sid}/chat")

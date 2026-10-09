@@ -41,14 +41,14 @@ AJANLAR = [
     {"ad": "Haritacı", "rol": "21 günlük gök haritasını çizer", "tur": "llm", "yetki": "Yeni plan oluşturur"},
     {"ad": "Kaynak Avcısı", "rol": "Konu için kaynakları tarar, sana en uygun tekini gerekçesiyle seçer", "tur": "llm+kod",
      "yetki": "Bağlantı uydurmaz; yalnızca doğrulanmış kaynak ya da arama bağlantısı verir"},
-    {"ad": "Gözcü", "rol": "İkizini ve istikrarını izler", "tur": "kod", "yetki": "Yalnızca okur ve ölçer"},
+    {"ad": "Gözcü", "rol": "İlerlemeni rotanla karşılaştırır ve riski ölçer", "tur": "kod", "yetki": "Yalnızca okur ve ölçer"},
     {"ad": "Yörüngeci", "rol": "Plan gerisinde kalınca en hafif müdahaleyi seçer", "tur": "llm",
      "yetki": "Küçük değişikliği uygular, büyüğü onaya sunar"},
     {"ad": "Rehber", "rol": "Suçlamadan, tek net adım önerir", "tur": "llm", "yetki": "Mini görev ekleyebilir"},
     {"ad": "Konu Bekçisi", "rol": "Anlattığının seçtiğin konuyla bağını denetler", "tur": "llm+kod",
      "yetki": "Konu dışı anlatımı ikize ulaştırmaz"},
     {"ad": "Kaşif", "rol": "Sınav sorusu hazırlar", "tur": "llm", "yetki": "Referans cevabı kullanıcıdan saklar"},
-    {"ad": "İkiz", "rol": "Yalnızca senin anlattıklarını bilir", "tur": "llm", "yetki": "Başka bilgi kullanamaz"},
+    {"ad": "İkiz", "rol": "Yalnızca senin öğrettiklerini bilir; sen öğrettikçe büyür", "tur": "llm", "yetki": "Başka bilgi kullanamaz"},
     {"ad": "Hakem", "rol": "İkiz'in cevaplarını denetler", "tur": "llm+kod", "yetki": "Cevabı söylemez, ipucu verir"},
 ]
 ALAN_ADI = {"akademik": "Akademik", "hobi": "Hobiler"}
@@ -199,7 +199,7 @@ def kurulum(sid: str) -> None:
             else:
                 emit(s, "Kaynak Avcısı", f"{ALAN_ADI[alan]}: doğrulanmış bir listem yok; {len(k['arama'])} arama önerisi hazırladı.", "done", alan=alan)
 
-        emit(s, "Gözcü", "İkizini senin seviyende başlattı.", "done")
+        emit(s, "Gözcü", "Rotanı çizdi ve ilerlemeni sıfırdan başlattı. İkizin henüz hiçbir şey bilmiyor; ona sen öğreteceksin.", "done")
         _gecikme()
         s["coach"] = {"mode": "steady", "message": f"Hoş geldin {s['name']}. İlk günün hazır; küçük başla, ben buradayım.",
                       "action": {"title": "Bugünün ilk adımını aç", "minutes": 1}, "ask_user": None, "alan": None}
@@ -212,7 +212,7 @@ def kurulum(sid: str) -> None:
 def _fark_cumlesi(tr: dict, s: dict) -> tuple[str, int]:
     g, i = _yildiz(tr, tr["twin"]["day"], set())
     gap = i - g
-    return (f"İkizin {gap} yıldız önde." if gap > 0 else "İkizinle aynı seviyedesin."), gap
+    return (f"Rotanın {gap} yıldız gerisindesin." if gap > 0 else "Rotandasın."), gap
 
 
 def gun_kapat(sid: str, mod: str = "gercek", gun: int = 1, tutarlilik: float = 0.4) -> None:
@@ -541,14 +541,38 @@ def ogret_sil(sid: str) -> None:
         emit(s, "Gözlemevi", "İkizin öğrendiklerini sildi.", "info")
 
 
-def ogret_sinav(sid: str) -> dict:
+def _anlat_gorevleri(tr: dict) -> list[dict]:
+    return [x for x in tr["roadmap"]["tasks"] if x["type"] == "teach"]
+
+
+def _anlat_basligi(x: dict) -> str:
+    return x["title"].split("Anlat:", 1)[-1].strip() or x["title"]
+
+
+def _ogretilecek_gorev(s: dict, alan: str, gorev_id: str | None) -> dict | None:
+    """Seçilen (ya da bugünün / sıradaki) 'anlat' görevi. Gelecek günlerin görevi seçilemez."""
+    tr = s["tracks"][alan]
+    bugun = tr["twin"]["day"] + 1
+    acik = [x for x in _anlat_gorevleri(tr) if x["day"] <= bugun]
+    if gorev_id:
+        return next((x for x in acik if x["id"] == gorev_id), None)
+    bilgi = tr.get("ikiz_bilgi", {})
+    return (next((x for x in acik if x["day"] == bugun), None)
+            or next((x for x in acik if bilgi.get(x["id"], {}).get("star", "sonuk") == "sonuk"), None))
+
+
+def ogret_sinav(sid: str, gorev_id: str | None = None) -> dict:
     s = store.get(sid)
     with store.lock(sid):
         t = s["ogret"]
         if not t["cumleler"]:
             return {"ok": False, "mesaj": "İkizine önce birkaç cümle anlat."}
         alan = t["alan"]
-        gorev = next((g for g in bugun_gorevleri(s) if g["alan"] == alan and g["type"] == "teach"), None)
+        tr = s["tracks"][alan]
+        gorev = _ogretilecek_gorev(s, alan, gorev_id)
+        if gorev_id and not gorev:
+            return {"ok": False, "mesaj": "Bu kavramın günü henüz gelmedi; önce bugüne kadarki kavramları öğret."}
+        baslik = _anlat_basligi(gorev) if gorev else t["konu"]
 
         def _e(ajan, mesaj, tur):
             emit(s, ajan, mesaj, tur, alan=alan)
@@ -560,12 +584,46 @@ def ogret_sinav(sid: str) -> dict:
             emit(s, "Gözlemevi", "Model yanıt vermedi; sınav yapılamadı. Biraz sonra yeniden dene.", "error", alan=alan)
             return {"ok": False, "mesaj": "Model şu an yanıt vermiyor. Biraz sonra yeniden dene."}
         gorunum = oa.public_view(sonuc)
+        gorunum["kavram"] = baslik
         t["son"] = gorunum
-        if sonuc.exam and gorev and sonuc.star != "sonuk" and gorev["id"] not in s["bitenler"]:
-            s["bitenler"].append(gorev["id"])
-            emit(s, "Gözlemevi", "Bugünün \"anlat\" adımı tamamlandı olarak işaretlendi.", "done", alan=alan)
+        if sonuc.exam:
+            anahtar = gorev["id"] if gorev else f"serbest-{len(tr.get('ikiz_bilgi', {})) + 1}"
+            tr.setdefault("ikiz_bilgi", {})[anahtar] = {"baslik": baslik, "star": sonuc.star, "score": sonuc.score,
+                                                         "total": len(sonuc.exam), "gun": tr["twin"]["day"] + 1}
+            if sonuc.star == "sonuk":
+                emit(s, "İkiz", f"“{baslik}” hakkında hâlâ bir şey bilmiyorum. Bana biraz daha anlatır mısın?", "info", alan=alan)
+            else:
+                emit(s, "İkiz", f"Artık “{baslik}” konusunu biliyorum ({sonuc.score}/{len(sonuc.exam)}). Bildiğim her şeyi senden öğrendim.",
+                     "done", {"star": sonuc.star}, alan)
+        if sonuc.exam and gorev and sonuc.star != "sonuk":
+            if gorev["day"] == tr["twin"]["day"] + 1:
+                if gorev["id"] not in s["bitenler"]:
+                    s["bitenler"].append(gorev["id"])
+            else:
+                gorev["done"] = True
+            emit(s, "Gözlemevi", f"“{baslik}” anlatma adımı tamamlandı olarak işaretlendi.", "done", alan=alan)
         store.save(s)
         return {"ok": True, "sonuc": gorunum}
+
+
+def _ikiz_gorunum(s: dict, tr: dict) -> dict:
+    """İkiz yalnızca kullanıcının öğrettiklerinden oluşur: her 'anlat' görevi ikizin bir yıldızı."""
+    bugun = tr["twin"]["day"] + 1
+    bilgi = tr.get("ikiz_bilgi", {})
+    yildizlar = []
+    for x in _anlat_gorevleri(tr):
+        b = bilgi.get(x["id"])
+        yildizlar.append({"id": x["id"], "baslik": _anlat_basligi(x), "gun": x["day"], "acik": x["day"] <= bugun,
+                          "star": b["star"] if b else "sonuk", "score": b["score"] if b else 0, "total": b["total"] if b else 0})
+    serbest = [{"id": k, "baslik": v["baslik"], "gun": v["gun"], "acik": True, "star": v["star"], "score": v["score"], "total": v["total"]}
+               for k, v in bilgi.items() if k.startswith("serbest-")]
+    hepsi = yildizlar + serbest
+    toplam = max(len(yildizlar), 1)
+    bildigi = sum((y["score"] / y["total"]) if y["total"] else 0 for y in yildizlar)
+    return {"yildizlar": hepsi, "ogretilen": sum(1 for y in hepsi if y["star"] != "sonuk"),
+            "halkali": sum(1 for y in hepsi if y["star"] == "halkali"), "kavram_sayisi": len(yildizlar),
+            "bilgi_yuzde": round(100 * bildigi / toplam),
+            "siradaki": next(({"id": y["id"], "baslik": y["baslik"]} for y in yildizlar if y["acik"] and y["star"] != "halkali"), None)}
 
 
 # ------------------------------------------------------------------- görünüm
@@ -576,7 +634,7 @@ def _egri(tr: dict) -> dict:
         g, i = _yildiz(tr, d, set())
         gercek.append(g)
         ideal.append(i)
-    return {"sen": gercek, "ikiz": ideal}
+    return {"sen": gercek, "rota": ideal}
 
 
 def _parlaklik(tr: dict) -> int:
@@ -602,9 +660,10 @@ def gorunum(sid: str) -> dict | None:
             "alan": alan, "etiket": ALAN_ADI[alan], "konu": tr["topic"], "hazir": True,
             "hedef": {"secilen": tr["goal"]["selected"], "gerekce": tr["goal"]["rationale"], "adaylar": tr["goal"]["candidates"],
                       "olcut": tr["goal"]["success_metric"], "sure": tr["goal"]["duration_days"]},
-            "ikiz": {"gun": gun, "sen_yildiz": gercek, "ikiz_yildiz": ideal, "toplam_yildiz": toplam, "fark": ideal - gercek,
-                     "seri": tr["twin"]["streak"], "risk": tr["twin"]["risk"], "risk_tr": RISK_TR[tr["twin"]["risk"]],
-                     "parlaklik": _parlaklik(tr), "egri": _egri(tr)},
+            "ilerleme": {"gun": gun, "sen_yildiz": gercek, "rota_yildiz": ideal, "toplam_yildiz": toplam, "fark": ideal - gercek,
+                         "seri": tr["twin"]["streak"], "risk": tr["twin"]["risk"], "risk_tr": RISK_TR[tr["twin"]["risk"]],
+                         "parlaklik": _parlaklik(tr), "egri": _egri(tr)},
+            "ikiz": _ikiz_gorunum(s, tr),
             "haftalar": tr["roadmap"]["weeks"], "kaynaklar": tr.get("kaynaklar"),
             "harita": [{"id": x["id"], "day": x["day"], "title": x["title"], "type": x["type"], "minutes": x["minutes"],
                         "done": bool(x["done"] or x["id"] in s["bitenler"])} for x in tr["roadmap"]["tasks"]],
@@ -679,7 +738,7 @@ _KISILIK = {
     "Gözlemevi": "Ekibin orkestratörüsün. Soruyu kısaca yanıtlar, gerekirse hangi ajanın daha iyi yardım edeceğini söylersin.",
     "Rehber": "Sıcak, suçlamayan bir koçsun. Tek net, küçük bir adım önerirsin.",
     "Yörüngeci": "Planı yeniden düzenleyen ajansın. Neden plan değiştirdiğini ya da ne önerebileceğini açıklarsın; planı kendin değiştirmezsin, değişiklik için kullanıcıya 'Görev ver' ile istemesini söylersin.",
-    "Gözcü": "İkizi ve ilerlemeyi izleyen ajansın. Sayılarla, kısa ve nesnel konuşursun.",
+    "Gözcü": "Kullanıcının ilerlemesini rotayla (plan aynen uygulansaydı olacağı yer) karşılaştıran ajansın. Sayılarla, kısa ve nesnel konuşursun. Rota ikiz değildir; ikiz yalnızca kullanıcının öğrettiklerini bilir.",
     "Kutup Yıldızı": "Hedef seçen ajansın. Hedefin neden seçildiğini ve alternatiflerini açıklarsın.",
     "Haritacı": "Yol haritasını çizen ajansın. Haritanın mantığını ve sıralamasını açıklarsın.",
 }
@@ -716,16 +775,19 @@ def _sohbet_baglam(s: dict, alan: str) -> dict:
     gercek, ideal = _yildiz(tr, gun, set())
     bugun = [t["title"] for t in bugun_gorevleri(s) if t["alan"] == alan]
     return {"ad": s["name"], "alan": ALAN_ADI[alan], "konu": tr["topic"], "gun": gun + 1, "sure": tr["goal"]["duration_days"],
-            "hedef": tr["goal"]["selected"], "gercek_yildiz": gercek, "ikiz_yildiz": ideal, "risk": RISK_TR[tr["twin"]["risk"]],
+            "hedef": tr["goal"]["selected"], "gercek_yildiz": gercek, "rota_yildiz": ideal,
+            "ikizin_bildikleri": [y["baslik"] for y in _ikiz_gorunum(s, tr)["yildizlar"] if y["star"] != "sonuk"], "risk": RISK_TR[tr["twin"]["risk"]],
             "seri": tr["twin"]["streak"], "bugunun_gorevleri": bugun,
             "son_tarihler": s["son_tarihler"], "parlaklik": _parlaklik(tr)}
 
 
 def _sohbet_demo(ajan: str, b: dict) -> str:
-    fark = b["ikiz_yildiz"] - b["gercek_yildiz"]
+    fark = b["rota_yildiz"] - b["gercek_yildiz"]
     gorev = b["bugunun_gorevleri"][0] if b["bugunun_gorevleri"] else "bugün için görev kalmadı"
     if ajan == "Gözcü":
-        return f"{b['konu']} için {b['gercek_yildiz']} yıldız yaktın, istikrarlı ikizin {b['ikiz_yildiz']}. Fark {fark}, seri {b['seri']} gün, durum: {b['risk']}."
+        ik = ", ".join(b["ikizin_bildikleri"]) or "henüz hiçbir şey"
+        return (f"{b['konu']} için {b['gercek_yildiz']} yıldız yaktın; rotan bugün {b['rota_yildiz']} diyor. Fark {fark}, seri {b['seri']} gün, durum: {b['risk']}. "
+                f"İkizin şunu biliyor: {ik}.")
     if ajan == "Yörüngeci":
         return (f"Şu an fark {fark} yıldız ve durum {b['risk']}. Fark büyürse görevleri kısaltırım; büyük değişiklikleri sana sorarım. "
                 "Bir sınav ya da teslim tarihin varsa \"Ekibe görev ver\"den söyle, planı ona göre düzenleyelim.")

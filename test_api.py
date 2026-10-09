@@ -136,3 +136,26 @@ def test_kaynak_avcisi():
     r2 = c.post("/v2/sessions", json={"hobi": "İspanyolca"}).json()
     k2 = c.get(f"/v2/sessions/{r2['session_id']}").json()["alanlar"][0]["kaynaklar"]
     assert k2["kaynak_turu"] == "arama" and k2["secim"] is None and k2["arama"][0]["linkler"][0]["url"].startswith("https://www.google.com/search")
+
+
+def test_ikiz_yalnizca_ogrettiklerini_bilir():
+    r = c.post("/v2/sessions", json={"akademik": "Veri Yapıları", "dakika": 30}).json()
+    sid = r["session_id"]
+    v = c.get(f"/v2/sessions/{sid}").json()
+    a = v["alanlar"][0]
+    assert a["ikiz"]["ogretilen"] == 0 and a["ikiz"]["bilgi_yuzde"] == 0 and "rota_yildiz" in a["ilerleme"]
+    # rota ilerleyebilir ama ikiz öğretmeden büyümez
+    c.post(f"/v2/sessions/{sid}/demo/skip", json={"gun": 7, "tutarlilik": 1.0})
+    a = c.get(f"/v2/sessions/{sid}").json()["alanlar"][0]
+    assert a["ilerleme"]["sen_yildiz"] > 0 and a["ikiz"]["ogretilen"] == 0
+    ilk = next(y for y in a["ikiz"]["yildizlar"] if y["acik"])
+    gelecek = next(y for y in a["ikiz"]["yildizlar"] if not y["acik"])
+    c.post(f"/v2/sessions/{sid}/teach/add", json={"metin": "Bağlı listede her düğüm bir sonraki düğümü işaret eder. Bağlı listede erişim için baştan gezmek gerekir, indeks yoktur. Ekleme baştan yapılırsa hızlıdır."})
+    assert not c.post(f"/v2/sessions/{sid}/teach/exam", json={"gorev_id": gelecek["id"]}).json()["ok"]
+    ex = c.post(f"/v2/sessions/{sid}/teach/exam", json={"gorev_id": ilk["id"]}).json()
+    assert ex["ok"] and ex["sonuc"]["kavram"] == ilk["baslik"]
+    a = c.get(f"/v2/sessions/{sid}").json()["alanlar"][0]
+    y = next(y for y in a["ikiz"]["yildizlar"] if y["id"] == ilk["id"])
+    if ex["sonuc"]["star"] != "sonuk":
+        assert y["star"] == ex["sonuc"]["star"] and a["ikiz"]["ogretilen"] == 1
+        assert next(t for t in a["harita"] if t["id"] == ilk["id"])["done"]

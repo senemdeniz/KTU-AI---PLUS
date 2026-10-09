@@ -3,7 +3,7 @@
 =======================================================
 Bu dosya üç şey içerir:
   1. Veri şeması  : Profil, Hedef Kararı, Yol Haritası, İkiz Durumu
-  2. İkiz mantığı : "Gerçek Sen" ve "İstikrarlı Sen" ikizlerinin gelişimi,
+  2. İlerleme motoru: "Sen" (yalnızca tamamlananlarla büyür) ve "Rota" (plan aynen uygulansaydı) karşılaştırması,
                     sapma (divergence), risk ve yeniden planlama tetikleri
   3. Ajan prompt'ları : profil çıkarıcı, hedef seçici, planlayıcı,
                     ikiz sesi (öğret modu dahil), feedback koçu, yeniden planlayıcı
@@ -92,8 +92,8 @@ RiskLevel = Literal["momentum", "steady", "slipping", "at_risk"]
 @dataclass
 class TwinState:
     day: int
-    real: TwinSide                    # "Gerçek Sen İkizi": yalnızca tamamlananlarla büyür
-    ideal: TwinSide                   # "İstikrarlı Sen": plan her gün uygulansaydı
+    real: TwinSide                    # "Sen": yalnızca tamamlananlarla büyür
+    ideal: TwinSide                   # "Rota": plan her gün aynen uygulansaydı olunacak seviye (ikiz DEĞİL)
     streak: int = 0
     missed_days: int = 0              # art arda kaçırılan gün
     total_missed: int = 0
@@ -151,7 +151,7 @@ def advance_day(state: TwinState, roadmap: Roadmap, completed_ids: set[str]) -> 
     todays = [t for t in roadmap.tasks if t.day == state.day]
 
     for t in todays:
-        _gain(state.ideal, t)                     # ideal ikiz her şeyi yapar
+        _gain(state.ideal, t)                     # rota planın tamamını yapar
         if t.id in completed_ids:
             t.done = True
             _gain(state.real, t)                  # gerçek ikiz sadece yapılanı
@@ -296,18 +296,19 @@ Sadece şu JSON'u döndür:
 {"reply": str, "questions": [str], "teach_score": int|null, "teach_reason": str|null}"""
 
 FEEDBACK_COACH = """Sen kullanıcının istikrar koçusun. Amacın tek: kullanıcının yarın da devam etmesi.
-Sana ikizin durumu ve son olaylar (event log) verilecek.
+Sana kullanıcının durumu verilecek: "real" kullanıcının gerçek seviyesi, "ideal" ise ROTA (plan aynen uygulansaydı bugün olacağı seviye). Son olaylar (event log) da verilecek.
 
 Risk durumuna göre tonunu ve stratejini seç:
 - momentum (seri ≥ 5): Kutla ama abartma. Bir sonraki adım için hafif bir zorlaştırma öner.
-- steady: Somut ilerlemeyi göster (ikizin hangi beceride ne kadar büyüdü). Yarının görevini hatırlat.
+- steady: Somut ilerlemeyi göster (kullanıcı hangi beceride ne kadar büyüdü). Yarının görevini hatırlat.
 - slipping (1 gün kaçmış): Suçlama yok. Seriyi kurtarmak için 5 dakikalık "mini görev" öner.
-- at_risk (≥2 gün kaçmış ya da ikizler arası fark büyük): Planın kullanıcıya uymadığını varsay,
+- at_risk (≥2 gün kaçmış ya da rotayla fark büyük): Planın kullanıcıya uymadığını varsay,
   kullanıcıyı değil planı sorgula. Neyin zorladığını tek bir soruyla sor ve yeniden planlamayı öner.
 
 Her feedback'te:
-- "Gerçek Sen" ile "İstikrarlı Sen" arasındaki farkı bir cümleyle somut olarak ifade et
-  (ör. "İstikrarlı sen şu an Python'da 2.4'te, sen 2.1'desin; iki gün düzenli çalışma farkı kapatır.").
+- Kullanıcı ile rotası arasındaki farkı bir cümleyle somut olarak ifade et
+  (ör. "Rotan şu an Python'da 2.4'te, sen 2.1'desin; iki gün düzenli çalışma farkı kapatır.").
+- "İkiz" kelimesini rota için KULLANMA: ikiz yalnızca kullanıcının ona öğrettiklerini bilen ayrı bir karakterdir.
 - Tek bir net eylem çağrısı yap.
 - En fazla 3 cümle. Emoji yok, nasihat yok.
 
@@ -316,7 +317,7 @@ Sadece şu JSON'u döndür:
  "action": {"title": str, "minutes": int}, "ask_user": str|null}"""
 
 REPLANNER = """Sen yol haritasını yöneten ajansın. Kullanıcı planın gerisinde kaldığında
-planı KENDİ KARARINLA yeniden düzenlersin. Sana mevcut yol haritası, ikizin durumu,
+planı KENDİ KARARINLA yeniden düzenlersin. Sana mevcut yol haritası, kullanıcının durumu (real) ve rotası (ideal),
 event log ve (varsa) kullanıcının "neyin zorladığı" sorusuna cevabı verilecek.
 
 Seçebileceğin müdahaleler (bir veya birkaçı):
@@ -511,8 +512,8 @@ def _mock(system: str, payload: dict) -> dict:
         risk, real, ideal = st.get("risk", "steady"), st.get("real", {}), st.get("ideal", {})
         gap_skill = max(ideal, key=lambda k: ideal[k] - real.get(k, 0)) if ideal else "python"
         r, i = real.get(gap_skill, 0), ideal.get(gap_skill, 0)
-        gap_line = (f"İstikrarlı sen {gap_skill} becerisinde {i:.2f}, sen {r:.2f} seviyesindesin."
-                    if i - r > 0.01 else "İkiniz şu an aynı seviyedesiniz.")
+        gap_line = (f"Rotan {gap_skill} becerisinde {i:.2f}, sen {r:.2f} seviyesindesin."
+                    if i - r > 0.01 else "Şu an rotandasın.")
         msgs = {
             "momentum": (f"{st.get('streak', 0)} gündür aralıksız devam ediyorsun. {gap_line} Yarın görevin bir tık zor olacak, hazırsın.",
                          {"title": "Yarınki görevin ilk adımını şimdi aç", "minutes": 2}, None),
@@ -630,7 +631,7 @@ if __name__ == "__main__":
         snap = twin_snapshot(state)
         print(f"--- {label}: 7 gün sonra ---")
         print(" Gerçek Sen   :", snap["real"])
-        print(" İstikrarlı Sen:", snap["ideal"])
+        print(" Rota:", snap["ideal"])
         print(f" seri={snap['streak']}  fark={snap['divergence']}  risk={snap['risk']}")
         print(" Koç:", coach_feedback(state)["message"])
         print(" Yeniden planlama tetiklendi mi?:", maybe_replan(state, rm, goal) is not None, "\n")

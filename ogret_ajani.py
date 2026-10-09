@@ -198,6 +198,56 @@ def _norm(s: str) -> str:
     return s.lower().replace("ı", "i").replace("İ", "i")
 
 
+_Q = ExamQuestion
+# Demo modu: Veri Yapıları planındaki her "anlat" kavramına özel sınav (kavram adı görev başlığında geçer)
+_DEMO_KAVRAM = {
+    "bagli liste": [
+        _Q("q1", "Bağlı listede elemanlar birbirine nasıl bağlanır?", "Her düğüm veriyi ve bir sonraki düğümün işaretçisini tutar.", ["düğüm", "işaret", "sonraki"]),
+        _Q("q2", "Bağlı listede 5. elemana ulaşmak neden diziden yavaştır?", "İndeks yoktur; baştan başlayıp düğüm düğüm gezmek gerekir, O(n).", ["baştan", "gez", "indeks"]),
+        _Q("q3", "Bağlı listenin başına eleman eklemek neden hızlıdır?", "Yeni düğüm eski başı işaret eder ve baş güncellenir; kaydırma gerekmez, O(1).", ["baş", "ekle", "kaydır"]),
+    ],
+    "yigin ve kuyruk": _DEMO_EXAMS["veri yap"][:1] + [
+        _Q("q2", "Parantezlerin doğru eşleşip eşleşmediğini kontrol etmek için hangi yapı kullanılır, neden?", "Yığın: açılan parantez yığına konur, kapanan en son açılanla eşleşmeli.", ["yığın", "açılan", "kapanan"]),
+        _Q("q3", "Python'da kuyruk için neden liste yerine deque önerilir?", "Listenin başından silmek elemanları kaydırır (O(n)); deque iki uçta da O(1).", ["baş", "kaydır", "deque"]),
+    ],
+    "hash tablosu": [
+        _DEMO_EXAMS["veri yap"][1],
+        _Q("q2", "Hash tablosunda çakışma nedir?", "İki farklı anahtarın aynı konuma düşmesidir; zincirleme ya da açık adresleme ile çözülür.", ["çakışma", "aynı", "konum"]),
+        _Q("q3", "Hash tablosu her zaman O(1) müdür?", "Hayır; çok çakışma olursa en kötü durumda O(n)'e düşebilir.", ["çakışma", "kötü", "her zaman"]),
+    ],
+    "ikili arama agaci": [
+        _Q("q1", "İkili arama ağacında bir düğümün sol ve sağ alt ağaçları neyi sağlar?", "Soldakiler düğümden küçük, sağdakiler büyüktür.", ["sol", "sağ", "küçük"]),
+        _Q("q2", "Arama neden hızlıdır?", "Her adımda karşılaştırıp bir yarıyı eleriz; dengeli ağaçta O(log n).", ["karşılaştır", "yarı", "ele"]),
+        _Q("q3", "Sıralı sayıları sırayla eklersek ne olur?", "Ağaç tek yöne uzar, bağlı listeye döner; arama O(n) olur.", ["sıralı", "dengesiz", "liste"]),
+    ],
+    "bfs ve dfs": [
+        _Q("q1", "BFS bir grafı nasıl gezer?", "Başlangıca yakın komşulardan başlayarak katman katman, kuyrukla gezer.", ["komşu", "katman", "kuyruk"]),
+        _Q("q2", "DFS bir grafı nasıl gezer?", "Bir yoldan gidebildiği kadar derine gider, sonra geri döner; yığın ya da özyinelemeyle.", ["derin", "geri", "yığın"]),
+        _Q("q3", "Ağırlıksız grafta en kısa yolu hangisi bulur?", "BFS; katman katman ilerlediği için ilk ulaştığı yol en kısadır.", ["bfs", "kısa", "katman"]),
+    ],
+}
+_DEMO_HINTS_Q.update({
+    "Bağlı listede elemanlar birbirine nasıl bağlanır?": "Bir düğüm bir sonrakini nasıl bulur? İkizine bunu anlattın mı?",
+    "Bağlı listede 5. elemana ulaşmak neden diziden yavaştır?": "Dizide doğrudan atlayabiliyoruz; bağlı listede ne yapmak gerekiyor?",
+    "Bağlı listenin başına eleman eklemek neden hızlıdır?": "Başa eklerken hangi işaretçiler değişir? Diğer elemanlara dokunuyor musun?",
+    "Parantezlerin doğru eşleşip eşleşmediğini kontrol etmek için hangi yapı kullanılır, neden?": "Kapanan bir parantez hangi açılanla eşleşmeli: ilk mi, en son mu?",
+    "Python'da kuyruk için neden liste yerine deque önerilir?": "Listenin başından eleman silince diğer elemanlara ne olur?",
+    "Hash tablosunda çakışma nedir?": "İki anahtar aynı yere düşerse ne olur? İkizine anlattın mı?",
+    "Hash tablosu her zaman O(1) müdür?": "Çok sayıda anahtar aynı yere düşerse arama nasıl etkilenir?",
+    "İkili arama ağacında bir düğümün sol ve sağ alt ağaçları neyi sağlar?": "Küçük değerler hangi tarafa, büyükler hangi tarafa gider?",
+    "Arama neden hızlıdır?": "Her karşılaştırmadan sonra aramaya devam etmen gereken kısım ne kadar küçülür?",
+    "Sıralı sayıları sırayla eklersek ne olur?": "1, 2, 3, 4, 5'i sırayla eklediğini çiz. Ağaç neye benziyor?",
+    "BFS bir grafı nasıl gezer?": "Önce hangi düğümleri ziyaret ediyorsun: yakınları mı, en derindekini mi?",
+    "DFS bir grafı nasıl gezer?": "Çıkmaza girince ne yapıyorsun? Bunu ikizine anlattın mı?",
+    "Ağırlıksız grafta en kısa yolu hangisi bulur?": "Hangi gezinti hedefe en az adımla ilk ulaşır?",
+})
+
+
+def _demo_kavram_sinavi(task_title: str) -> list[ExamQuestion] | None:
+    n = _norm(task_title).translate(str.maketrans("ğüşöç", "gusoc"))
+    return next((sinav for k, sinav in _DEMO_KAVRAM.items() if k in n), None)
+
+
 def _demo_exam(topic: str) -> list[ExamQuestion]:
     n = _norm(topic).replace("data structures", "veri yap")
     for key, exam in _DEMO_EXAMS.items():
@@ -261,7 +311,7 @@ def split_sentences(text: str) -> list[str]:
 
 def kasif_sinav(topic: str, task_title: str) -> list[ExamQuestion]:
     if ia.is_mock():
-        return _demo_exam(topic)
+        return _demo_kavram_sinavi(task_title) or _demo_exam(topic)
     out = ia.llm_json(KASIF_SINAV, {"topic": topic, "task": task_title})
     return [ExamQuestion(**q) for q in out["questions"]][:3]
 
@@ -337,14 +387,15 @@ def ikize_ogret(topic: str, task_title: str, explanation: str, emit: Emit | None
     for u in d.uyarilar:
         _emit("Gözlemevi", u["mesaj"], "info")
 
-    retry = topic in _EXAM_CACHE
+    anahtar = f"{oturum or '-'}|{topic}|{task_title}"     # sınav oturuma ve kavrama özeldir
+    retry = anahtar in _EXAM_CACHE
     if not retry:
         _emit("Gözlemevi", "Sınavı hazırlaması için Kaşif'e devrediyorum.", "handoff")
-        _EXAM_CACHE[topic] = kasif_sinav(topic, task_title)
-        _emit("Kaşif", f"{len(_EXAM_CACHE[topic])} soru hazırladı: biri nasıl, biri neden, biri uç durum.", "done")
+        _EXAM_CACHE[anahtar] = kasif_sinav(topic, task_title)
+        _emit("Kaşif", f"{len(_EXAM_CACHE[anahtar])} soru hazırladı: biri nasıl, biri neden, biri uç durum.", "done")
     else:
         _emit("Gözlemevi", "Aynı sınav tekrar uygulanıyor; anlatım güncellendi.", "info")
-    exam = _EXAM_CACHE[topic]
+    exam = _EXAM_CACHE[anahtar]
 
     _emit("Gözlemevi", "İkiz sınava giriyor. Yalnızca senin anlattıklarını biliyor.", "handoff")
     answers = ikiz_sinav(exam, sentences)
