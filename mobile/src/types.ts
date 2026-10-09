@@ -9,13 +9,21 @@ export interface Olay {
   id: number; t: number; ajan: string; mesaj: string;
   tur: 'chat' | 'start' | 'info' | 'decision' | 'handoff' | 'done' | 'guard' | 'error'; veri: any; alan: Alan | null;
 }
+/** Sen ve rota: plan aynen uygulansaydı bugün olacağın yer (ikiz DEĞİL). */
+export interface Ilerleme {
+  gun: number; sen_yildiz: number; rota_yildiz: number; toplam_yildiz: number; fark: number;
+  seri: number; risk: Risk; risk_tr: string; parlaklik: number; egri: { sen: number[]; rota: number[] };
+}
+/** İkiz yalnızca kullanıcının öğrettiklerinden oluşur. */
+export interface IkizYildiz { id: string; baslik: string; gun: number; acik: boolean; star: 'sonuk' | 'parlak' | 'halkali'; score: number; total: number }
 export interface Ikiz {
-  gun: number; sen_yildiz: number; ikiz_yildiz: number; toplam_yildiz: number; fark: number;
-  seri: number; risk: Risk; risk_tr: string; parlaklik: number; egri: { sen: number[]; ikiz: number[] };
+  yildizlar: IkizYildiz[]; ogretilen: number; halkali: number; kavram_sayisi: number; bilgi_yuzde: number;
+  siradaki: { id: string; baslik: string } | null;
 }
 export interface AlanView {
   alan: Alan; etiket: string; konu: string; hazir: boolean;
   hedef?: { secilen: string; gerekce: string; olcut: string; sure: number; adaylar: { title: string; fit_score: number; reason: string }[] };
+  ilerleme?: Ilerleme;
   ikiz?: Ikiz;
   haftalar?: { week: number; theme: string; milestone: string }[];
   harita?: { id: string; day: number; title: string; type: Gorev['type']; minutes: number; done: boolean }[];

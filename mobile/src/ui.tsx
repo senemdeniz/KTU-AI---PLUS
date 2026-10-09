@@ -66,8 +66,8 @@ export function Nav({ aktif, onSec }: { aktif: Sekme; onSec: (k: Sekme) => void 
   );
 }
 
-/** Takımyıldız: ilk n yıldız yanık (sen), sonraki fark kadarı halkalı (ikiz), kalanı sönük. */
-export function Takimyildiz({ sen, ikiz, toplam, w = 310 }: { sen: number; ikiz: number; toplam: number; w?: number }) {
+/** Takımyıldız: ilk n yıldız yanık (sen), rotaya kadar olanlar kesikli (rota), kalanı sönük. */
+export function Takimyildiz({ sen, rota: ikiz, toplam, w = 310 }: { sen: number; rota: number; toplam: number; w?: number }) {
   const h = 200;
   const n = Math.max(toplam, 1);
   const nok = Array.from({ length: n }, (_, i) => {
@@ -76,19 +76,19 @@ export function Takimyildiz({ sen, ikiz, toplam, w = 310 }: { sen: number; ikiz:
   });
   const yol = (a: number, b: number) => nok.slice(a, b).map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
   return (
-    <Svg width={w} height={h} accessibilityLabel={`Takımyıldız: ${sen} yıldız yanık, ikizin ${Math.max(ikiz - sen, 0)} yıldız önde`}>
+    <Svg width={w} height={h} accessibilityLabel={`Takımyıldız: ${sen} yıldız yanık, rotanın ${Math.max(ikiz - sen, 0)} yıldız gerisinde`}>
       {sen > 1 && <Path d={yol(0, sen)} stroke={C.gold} strokeWidth={1.6} fill="none" />}
-      {ikiz > sen && <Path d={yol(Math.max(sen - 1, 0), ikiz)} stroke={C.blue} strokeWidth={1.4} strokeDasharray="5 5" fill="none" />}
+      {ikiz > sen && <Path d={yol(Math.max(sen - 1, 0), ikiz)} stroke={C.soft} strokeOpacity={0.6} strokeWidth={1.3} strokeDasharray="3 6" fill="none" />}
       {ikiz < n && <Path d={yol(Math.max(ikiz - 1, 0), n)} stroke={C.line2} strokeWidth={1.2} fill="none" />}
       {nok.map((p, i) =>
         i < sen ? <Circle key={i} cx={p.x} cy={p.y} r={i === sen - 1 ? 6 : 4.5} fill={C.gold} />
-        : i < ikiz ? <Circle key={i} cx={p.x} cy={p.y} r={5} fill="none" stroke={C.blue} strokeWidth={1.8} />
+        : i < ikiz ? <Circle key={i} cx={p.x} cy={p.y} r={4} fill="none" stroke={C.soft} strokeOpacity={0.7} strokeWidth={1.3} />
         : <Circle key={i} cx={p.x} cy={p.y} r={3} fill={C.line2} />)}
     </Svg>
   );
 }
 
-/** Sen vs İkiz yıldız eğrisi. */
+/** Sen vs rota yıldız eğrisi. */
 export function Egri({ sen, ikiz, w = 310, h = 130 }: { sen: number[]; ikiz: number[]; w?: number; h?: number }) {
   const max = Math.max(...ikiz, 1);
   const n = Math.max(ikiz.length - 1, 1);
@@ -96,7 +96,7 @@ export function Egri({ sen, ikiz, w = 310, h = 130 }: { sen: number[]; ikiz: num
   return (
     <Svg width={w} height={h}>
       <Line x1={4} y1={h - 8} x2={w - 4} y2={h - 8} stroke={C.line2} />
-      <Path d={nk(ikiz)} stroke={C.blue} strokeWidth={2} strokeDasharray="5 5" fill="none" />
+      <Path d={nk(ikiz)} stroke={C.soft} strokeOpacity={0.6} strokeWidth={2} strokeDasharray="3 6" fill="none" />
       <Path d={nk(sen)} stroke={C.gold} strokeWidth={2.4} fill="none" />
     </Svg>
   );

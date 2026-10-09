@@ -10,7 +10,8 @@ export function Gokyuzu({ gorevVer, ekipAc }: { gorevVer: () => void; ekipAc: ()
   const [harita, setHarita] = useState(false);
   if (!view) return null;
   const a = view.alanlar[Math.min(alan, view.alanlar.length - 1)];
-  const ik = a.ikiz;
+  const ik = a.ilerleme;
+  const tw = a.ikiz;
   return (
     <ScrollView contentContainerStyle={s.pad}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -33,20 +34,25 @@ export function Gokyuzu({ gorevVer, ekipAc }: { gorevVer: () => void; ekipAc: ()
             <Text style={s.h2}>{a.konu.split('·').pop()?.trim()} Takımyıldızı</Text>
             <Text style={s.small}>{ik.sen_yildiz} / {ik.toplam_yildiz} yıldız</Text>
           </View>
-          <View style={{ alignItems: 'center' }}><Takimyildiz sen={ik.sen_yildiz} ikiz={ik.ikiz_yildiz} toplam={ik.toplam_yildiz} /></View>
+          <View style={{ alignItems: 'center' }}><Takimyildiz sen={ik.sen_yildiz} rota={ik.rota_yildiz} toplam={ik.toplam_yildiz} /></View>
           <View style={{ flexDirection: 'row', gap: 14, flexWrap: 'wrap' }}>
             <Text style={{ color: C.gold, fontSize: 12 }}>● Senin yaktıkların</Text>
-            <Text style={{ color: C.blue, fontSize: 12 }}>○ İkizinin önde yaktıkları</Text>
+            <Text style={{ color: C.soft, fontSize: 12 }}>◌ Rota: planı aksatmasaydın</Text>
           </View>
         </View>
         <View style={{ flexDirection: 'row', gap: 8 }}>
-          {[[`%${ik.parlaklik}`, 'Parlaklık', false], [`${ik.seri} gün`, 'Seri', false], [`${ik.fark} yıldız`, 'İkizinle fark', ik.fark > 0]].map(([v, l, d], i) => (
+          {[[`%${ik.parlaklik}`, 'Parlaklık', false], [`${ik.seri} gün`, 'Seri', false], [`${ik.fark} yıldız`, 'Rotanın gerisinde', ik.fark > 0]].map(([v, l, d], i) => (
             <View key={i} style={[s.card2, { flex: 1, backgroundColor: d ? C.dangerBg : C.card2 }]}>
               <Text style={{ color: d ? C.danger : C.text, fontSize: 18, fontWeight: '700' }}>{v}</Text>
               <Text style={s.small}>{l as string}</Text>
             </View>))}
         </View>
       </>)}
+      {tw && (
+        <View style={s.card2}>
+          <Text style={{ color: C.blue, fontWeight: '700' }}>İkizin: %{tw.bilgi_yuzde}</Text>
+          <Text style={s.body}>{tw.ogretilen ? `${tw.kavram_sayisi} kavramdan ${tw.ogretilen} tanesini ona öğrettin.` : 'Henüz hiçbir şey bilmiyor; ona sen öğreteceksin.'}</Text>
+        </View>)}
       {!ik && <Text style={s.muted}>Bu alanın gökyüzü hazırlanıyor…</Text>}
       {a.harita && (
         <View style={s.card}>

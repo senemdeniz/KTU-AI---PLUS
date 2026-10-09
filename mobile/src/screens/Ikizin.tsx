@@ -12,28 +12,33 @@ export function Ikizin({ ogretAc }: { ogretAc: (a: 'akademik' | 'hobi') => void 
   const [oran, setOran] = useState(25);
   if (!view || !sid) return null;
   const a = view.alanlar[Math.min(alan, view.alanlar.length - 1)];
-  const ik = a.ikiz;
+  const ik = a.ilerleme;
+  const tw = a.ikiz;
   const kotu = ik && (ik.risk === 'at_risk' || ik.risk === 'slipping');
   return (
     <ScrollView contentContainerStyle={s.pad}>
       <Text style={s.h1}>İkizin</Text>
-      <Text style={s.muted}>Gerçek sen ile istikrarlı sen. İkizin bir yapay zekâ karakteridir.</Text>
+      <Text style={s.muted}>İkizin boş doğdu ve yalnızca senin öğrettiklerini bilir; senden önde olamaz. İkizin bir yapay zekâ karakteridir.</Text>
       <View style={s.row}>{view.alanlar.map((x, i) => <Chip key={x.alan} label={x.etiket} on={i === alan} onPress={() => setAlan(i)} />)}</View>
       <Hata metin={hata} />
       {ik && (<>
         <View style={s.card}>
-          <Egri sen={ik.egri.sen} ikiz={ik.egri.ikiz} />
+          <Egri sen={ik.egri.sen} ikiz={ik.egri.rota} />
           <View style={{ flexDirection: 'row', gap: 14 }}>
-            <Text style={{ color: C.gold, fontSize: 12 }}>— Sen</Text><Text style={{ color: C.blue, fontSize: 12 }}>- - İstikrarlı sen</Text>
+            <Text style={{ color: C.gold, fontSize: 12 }}>— Sen</Text><Text style={{ color: C.soft, fontSize: 12 }}>- - Rota</Text>
           </View>
         </View>
         <View style={[s.card2, { backgroundColor: kotu ? C.dangerBg : C.card2 }]}>
           <Text style={{ color: kotu ? C.danger : C.gold, fontWeight: '700' }}>Durum: {ik.risk_tr}</Text>
-          <Text style={s.body}>İkizin {ik.fark > 0 ? `${ik.fark} yıldız önde` : 'seninle aynı tempoda'}. Seri: {ik.seri} gün.</Text>
+          <Text style={s.body}>{ik.fark > 0 ? `Rotanın ${ik.fark} yıldız gerisindesin` : 'Rotandasın'}. Seri: {ik.seri} gün.</Text>
         </View>
       </>)}
       <View style={s.card}>
-        <Text style={s.h2}>İkizine öğret</Text>
+        <Text style={s.h2}>İkizin ne biliyor? %{tw?.bilgi_yuzde ?? 0}</Text>
+        {tw?.yildizlar.map((y) => (
+          <Text key={y.id} style={{ color: y.star === 'sonuk' ? C.dim : C.blue, fontSize: 13, opacity: y.acik ? 1 : 0.5 }}>
+            {y.star === 'halkali' ? '◉' : y.star === 'parlak' ? '●' : '○'} {y.baslik}{y.acik ? '' : ` · ${y.gun}. günde açılır`}
+          </Text>))}
         <Text style={s.muted}>Bir konuyu kendi cümlelerinle anlat; ikizin yalnızca senin anlattıklarını bilir ve sınava girer.</Text>
         <Btn onPress={() => ogretAc(a.alan)}>İkizine öğret</Btn>
       </View>

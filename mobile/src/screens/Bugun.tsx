@@ -41,7 +41,7 @@ export function Bugun({ ogretAc }: { ogretAc: (alan: 'akademik' | 'hobi') => voi
         </View>
       </>)}
       <Btn onPress={() => calistir(() => api.gunuKapat(sid))} disabled={mesgul || view.durum !== 'hazir'}>Günü bitir</Btn>
-      <Text style={s.small}>Günü bitirince Gözcü ikizinle karşılaştırır; gerekirse ekip planı ayarlar.</Text>
+      <Text style={s.small}>Günü bitirince Gözcü seni rotanla karşılaştırır; gerekirse ekip planı ayarlar.</Text>
     </ScrollView>
   );
 }
