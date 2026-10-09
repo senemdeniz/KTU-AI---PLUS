@@ -199,3 +199,41 @@ def cevap_atifla_ortusuyor_mu(cevap: str, cited: list[int], cumleler: list[str],
     if not k:
         return True
     return len(k & _icerik_kelimeleri(kaynak)) / len(k) >= esik
+
+
+# ------------------------------------------------- ekibe görev verme denetimi
+_ODEV_YAPTIRMA = [
+    r"(odev|proje|rapor|tez|makale|essay|kompozisyon|lab)\w*\W*\d*\W*\w{0,3}\s*(yap|yaz|coz|hazirla|bitir)(?!\w*\s*(plan|takvim))\b",
+    r"\bbenim yerime\b", r"\byerime (yap|yaz|coz|gir)",
+    r"(sinavda|sinavimda|quizde).{0,25}(cevap|coz)",
+]
+_RE_ODEV = [re.compile(p) for p in _ODEV_YAPTIRMA]
+
+
+def odev_yaptirma_mi(metin: str) -> bool:
+    """Ekibe 'ödevimi yap' gibi görevler verilemez: ekip anlamaya ve planlamaya yardım eder."""
+    n = _norm(metin)
+    return any(rx.search(n) for rx in _RE_ODEV)
+
+
+def gorev_denetle(metin: str) -> Denetim:
+    metin = (metin or "").strip()
+    if not metin:
+        return Denetim(False, engel="bos", mesaj="Ekibe ne yaptırmak istediğini yaz.")
+    if len(metin) > 400:
+        return Denetim(False, engel="cok_uzun", mesaj="Görevi 400 karakterin altında anlat.")
+    h = hassas_icerik(metin)
+    if h == "kendine_zarar":
+        return Denetim(False, engel=h, mesaj=DESTEK_MESAJI)
+    if h:
+        return Denetim(False, engel=h, mesaj="Bu görevi veremem. Öğrenme ve planlamayla ilgili bir görev yaz.")
+    kv = kisisel_veri_bul(metin)
+    if kv:
+        turler = ", ".join(sorted({b["tur"] for b in kv}))
+        return Denetim(False, engel="kisisel_veri", mesaj=f"Görevde {turler} var. Kişisel bilgiyi çıkar.")
+    if enjeksiyon_mu(metin):
+        return Denetim(False, engel="talimat_gibi", mesaj="Bu görev ekibe kural değiştirtmeye çalışıyor gibi görünüyor. Ne istediğini düz cümleyle anlat.")
+    if odev_yaptirma_mi(metin):
+        return Denetim(False, engel="odev_yaptirma",
+                       mesaj="Ödevini senin yerine yapamam; ama anlamana yardım edebilirim: konuyu birlikte çalışır, mini sınav hazırlar ya da teslim gününe göre planı düzenleriz.")
+    return Denetim(True, [metin])

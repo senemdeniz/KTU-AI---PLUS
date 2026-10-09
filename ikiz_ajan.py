@@ -340,24 +340,91 @@ Sadece şu JSON'u döndür:
 # 4) LLM ÇAĞRISI (tek nokta) + MOCK
 # ---------------------------------------------------------------------------
 
-def llm_json(system: str, payload: dict, max_tokens: int = 2000) -> dict:
-    """System prompt + JSON girdi → JSON çıktı. API anahtarı yoksa mock döner."""
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        return _mock(system, payload)
+class LLMError(RuntimeError):
+    """Model çağrısı başarısız oldu (ağ, kota, bozuk JSON). Üst katman demo içeriğine düşebilir."""
 
-    import anthropic  # pip install anthropic
 
-    client = anthropic.Anthropic()
-    msg = client.messages.create(
-        model=MODEL,
-        max_tokens=max_tokens,
-        system=system,
-        messages=[{"role": "user", "content": json.dumps(payload, ensure_ascii=False)}],
-    )
-    text = "".join(b.text for b in msg.content if b.type == "text").strip()
+def provider() -> str | None:
+    """Hangi sağlayıcı kullanılacak?
+    anthropic     : ANTHROPIC_API_KEY
+    openai_compat : HF_TOKEN (Hugging Face Inference Providers) ya da LLM_API_KEY + LLM_BASE_URL
+                    (Groq, OpenRouter, Together, yerel Ollama gibi OpenAI uyumlu her uç nokta)
+    None          : demo modu
+    LLM_PROVIDER=mock ile demo modu zorlanabilir."""
+    if os.environ.get("LLM_PROVIDER") == "mock":
+        return None
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        return "anthropic"
+    if os.environ.get("HF_TOKEN") or os.environ.get("LLM_API_KEY"):
+        return "openai_compat"
+    return None
+
+
+def model_name() -> str:
+    p = provider()
+    if p == "anthropic":
+        return MODEL
+    if p == "openai_compat":
+        return os.environ.get("LLM_MODEL") or os.environ.get("HF_MODEL") or "openai/gpt-oss-120b"
+    return "demo"
+
+
+def _json_cikar(text: str) -> dict:
+    """Modelin cevabından ilk JSON nesnesini çıkarır (kod bloğu, açıklama ya da düşünme metni olsa da)."""
+    text = (text or "").strip()
     if text.startswith("```"):
         text = text.split("```")[1].removeprefix("json").strip()
-    return json.loads(text)
+    a, b = text.find("{"), text.rfind("}")
+    if a < 0 or b <= a:
+        raise ValueError("cevapta JSON yok")
+    return json.loads(text[a:b + 1])
+
+
+def _openai_compat(system: str, payload: dict, max_tokens: int) -> str:
+    import urllib.request
+    base = (os.environ.get("LLM_BASE_URL") or "https://router.huggingface.co/v1").rstrip("/")
+    key = os.environ.get("LLM_API_KEY") or os.environ.get("HF_TOKEN", "")
+    body = json.dumps({
+        "model": model_name(), "max_tokens": max_tokens, "temperature": 0.3,
+        "messages": [{"role": "system", "content": system},
+                     {"role": "user", "content": json.dumps(payload, ensure_ascii=False)}],
+    }).encode()
+    req = urllib.request.Request(base + "/chat/completions", data=body, method="POST",
+                                 headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}"})
+    try:
+        with urllib.request.urlopen(req, timeout=float(os.environ.get("LLM_TIMEOUT", "90"))) as r:
+            data = json.loads(r.read())
+    except Exception as e:  # noqa: BLE001
+        raise LLMError(f"model uç noktasına ulaşılamadı: {type(e).__name__}") from e
+    try:
+        return data["choices"][0]["message"]["content"] or ""
+    except (KeyError, IndexError, TypeError) as e:
+        raise LLMError("model cevabı beklenen biçimde değil") from e
+
+
+def llm_json(system: str, payload: dict, max_tokens: int = 2000) -> dict:
+    """System prompt + JSON girdi → JSON çıktı. Sağlayıcı yoksa mock döner; çağrı başarısızsa LLMError."""
+    p = provider()
+    if p is None:
+        return _mock(system, payload)
+    for deneme in range(2):                     # bozuk JSON için bir kez daha dene
+        if p == "anthropic":
+            try:
+                import anthropic  # pip install anthropic
+                msg = anthropic.Anthropic().messages.create(
+                    model=MODEL, max_tokens=max_tokens, system=system,
+                    messages=[{"role": "user", "content": json.dumps(payload, ensure_ascii=False)}])
+            except Exception as e:  # noqa: BLE001
+                raise LLMError(f"Anthropic çağrısı başarısız: {type(e).__name__}") from e
+            text = "".join(b.text for b in msg.content if b.type == "text")
+        else:
+            text = _openai_compat(system, payload, max_tokens)
+        try:
+            return _json_cikar(text)
+        except (ValueError, json.JSONDecodeError):
+            if deneme == 1:
+                raise LLMError("model geçerli JSON döndürmedi")
+    raise LLMError("model geçerli JSON döndürmedi")
 
 
 _TASK_BANK = {
@@ -488,7 +555,7 @@ def extract_profile(name: str, cv_text: str, hobbies: list[str], goals: list[str
 
 
 def is_mock() -> bool:
-    return not os.environ.get("ANTHROPIC_API_KEY")
+    return provider() is None
 
 
 def select_goal(profile: Profile) -> GoalDecision:
