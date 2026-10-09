@@ -1,111 +1,180 @@
-# İkiz — seninle birlikte gelişen öğrenme ikizi
+# İkiz
 
-> **Agentic AI in Education** hackathon projesi. İki alan: **Akademik** (üniversite dersleri) ve **Hobiler**.
+**Bir ajan ekibi yolunu çizer; sen öğrendiğini ikizine öğretirsin.**
 
-İkiz'de gökyüzünde üç şey vardır:
+İkiz, *Agentic AI in Education* için yapılmış bir öğrenme uygulaması. Öğrenmek istediğin konuyu yazarsın. On iki ajanlık bir ekip senin için hedef seçer, günlük yol haritası çizer, konuya özgü güvenilir kaynak bulur ve ilerlemeni izler. Öğrendiğini **ikizine** anlatırsın. Her konunun kendi ikizi vardır ve ikizin yalnızca senin anlattığını bilir. Ayrı ajanlar onu sınava sokar, hatalı cümleni gösterir ve seni kaynağın doğru bölümüne yönlendirir.
 
-- **Sen:** bitirdiğin her görev bir yıldız yakar.
-- **Rota:** planı hiç aksatmasaydın bugün olacağın yer (kesikli çizgi). Aradaki fark "rotanın kaç yıldız gerisindesin" sorusunun cevabıdır.
-- **İkizlerin:** her takımyıldızın (konunun) **kendi ikizi** vardır (Vega, Altair…; adını değiştirebilirsin). Her ikiz boş doğar ve **yalnızca o konuda senin öğrettiklerini bilir**; bir ikize öğrettiğin diğerine geçmez. Plandaki her "anlat" kavramı ikizinin bir yıldızıdır: öğretmediysen sönük, kısmen doğruysa parlak, tamamen doğruysa halkalı. İkizin hiçbir zaman senden önde olamaz; sen öğrettikçe büyür.
+Gökyüzünde üç şey görürsün:
 
-Bir **ajan ekibi (Gözlemevi)** seni rotanla karşılaştırır, plan tutmuyorsa planı kendisi değiştirir ve yaptığı her şeyi canlı bir akışta gösterir.
+- **Sen (altın):** bitirdiğin her görev bir yıldız yakar.
+- **Rota (kesikli):** planı aksatmasaydın bugün olacağın yer.
+- **İkizlerin (mavi):** her konuya bir ikiz. Boş doğar, sen öğrettikçe parlar ve senden önde olamaz.
 
-## Çok-ajanlı sistem (neden çok ajan?)
+---
 
-Çok ajan burada süs değil; **bilgi ayrımı, bağımsız doğrulama ve denetlenebilirlik** için var.
+## Hızlı başlangıç
 
-| Ajan | Tür | Görev |
-|---|---|---|
-| Gözlemevi | LLM + kod | Orkestratör; görevleri dağıtır, büyük kararları kullanıcı onayına sunar |
-| Astronom → Kutup Yıldızı → Haritacı | LLM | Kurulum hattı: profil, tek ideal hedef, 21 günlük harita |
-| Gözcü | **kod** | İkizi ve riski deterministik hesaplar (`ikiz_ajan.py`) |
-| Yörüngeci | LLM | Plan gerideyse en hafif müdahaleyi seçer; küçüğü uygular, büyüğünü onaya sunar |
-| Rehber | LLM | Suçlamadan tek net adım önerir |
-| Kaynak Avcısı | LLM + kod | Konu için kaynakları puanlar, sana en uygun tekini gerekçesiyle seçer. Bağlantıyı model değil kod verir: elle doğrulanmış liste (şimdilik Veri Yapıları) ya da arama bağlantısı |
-| Konu Bekçisi | LLM + kod | Anlattığının seçilen konuyla bağını denetler; konu dışıysa İkiz'e ulaştırmaz, model yanıt vermezse kapalı kalır |
-| Kaşif · İkiz · Hakem | LLM | *İkizine öğret*: Kaşif referans cevabı saklar, İkiz yalnızca kullanıcının cümlelerini bilir, Hakem bağımsız doğrular |
-
-Üç akış: (1) kurulum hattı, (2) Ajan Akışı: Gözcü → Gözlemevi kararı → Yörüngeci → Rehber, (3) *İkizine öğret*: kısıtlı bilgi ile sınav.
-
-## Canlı demo özellikleri
-
-- **Canlı demo (kendi kendine oynar):** karşılama sayfasında "Canlı demoyu izle". Gerçek API çağrılarıyla Elif'in gökyüzünü kurar, 3 gün ilerletir, ikizine "bağlı liste"yi bilerek bir hatayla anlatır, Hakem'in hatayı işaretleyip VisuAlgo'ya yönlendirmesini gösterir, cümleyi düzeltir ve yıldızı halkalı yapar (~40 sn). İstediğin an "Durdur".
-- **Logo → Takımyıldızların:** İkiz logosuna tıklayınca açtığın tüm konular, rotaları ve ikizinin yıldızlarıyla tek sayfada.
-- **Çıkış ve devam anahtarı:** "Çıkış yap" bu cihazdan çıkarır; gökyüzün sunucuda kalır. Gösterilen 32 karakterlik devam anahtarıyla (şifre gibi sakla) karşılama sayfasından geri dönersin.
-- **Konuya özgü kaynak stratejisi:** Kaynak Avcısı önce konunun türünü belirler ve her türde farklı arar; strateji Yol haritası sayfasında açıkça yazar, her kaynağın rolü etiketlenir.
-  - **Dil (İspanyolca, Almanca…):** Türkçe konuşan biri için 1) Türkçe açıklayan kaynak (Ankara Üni. İSP102/İSP111), 2) İngilizce üzerinden köprü (Instituto Cervantes AVE), 3) A2 sonrası hedef dilde malzeme (Centro Virtual Cervantes). Dil öğretmeyen platformlar (Khan Academy) elenir.
-  - **Teknik (Veri Yapıları, programlama):** kalite önce: uygulamalı İngilizce kaynak ana kaynak (Runestone), Türkçe ders (Ankara Üni. BLM267) destek.
-  - **Akademik (Türev):** çözümlü örnekli ders notu önce; **Beceri (Gitar):** video ders + metronom gibi pratik aracı.
-  - İngilizce platformlarda konu İngilizce karşılığıyla aranır ("İspanyolca" → "Spanish"); karşılık bilinmiyorsa Türkçe kelimeyle arama yapılmaz.
-- **Doğrudan giriş ve kullanıcı avatarı:** kayıtta kendi takımyıldız avatarını seçersin (sen = altın). Daha önce gökyüzü kurduysan site açılınca doğrudan uygulamaya girersin; karşılama ekranında beklemezsin.
-- **Kaynak güvenilirliği:** her kaynakta yayıncı (ör. NUS, MIT, Python Software Foundation), güven düzeyi (yüksek/orta/düşük), elle doğrulama tarihi ve "Bağlantıları şimdi kontrol et" ile gerçek bağlantı durumu. Kendi kaynağını ekleyebilir, birincil yapabilirsin; Kaynak Avcısı alan adından yayıncıyı değerlendirir. Yalnızca https; iç ağ/yerel adresler (SSRF) ve güvensiz yönlendirmeler reddedilir.
-- **İkizine öğret, kavram başına:** her kavramın cümleleri ayrı tutulur. İkizin sayfasında her kavram için "İkizin bu kavramı senden nasıl öğrendi?" açılır: ona anlattığın cümleler ve sınavdaki her sorunun sonucu. Daha kötü bir deneme, halkalı bilgiyi silmez.
-
-- **Süreyi sen seçersin:** hedefe kaç günde ulaşmak istediğini (7–90 gün) profilde seçersin; Haritacı planı o güne yayar. Sonradan değiştirirsen geçmiş günlerin korunur, kalan görevler yeni takvime dağıtılır.
-- **Profil sayfası:** ad, günlük süre, saat, seviye, hedef, sınav tarihi güncellenir; ekip planı anında ayarlar.
-- **Takımyıldızların:** birden çok konu açabilirsin; "Gökyüzüme dön" açtığın tüm takımyıldızları gösterir.
-- **Ekip zihin haritası:** Gözlemevi merkezde, üç akış (kurulum, otonom döngü, ikizine öğret) renkli; çalışan ajan ve devir çizgisi canlı. Bir ajana dokununca ürettiği çıktı anında gelir (kopyala / .md indir).
-- **Hakem anında yönlendirir:** sınavdan sonra hatalı ya da eksik cümleni işaretler, "Düzelt" ile cümleyi yazı alanına geri alır ve seni kaynağın o kavramı anlatan bölümüne götürür (örn. VisuAlgo: Linked List). Cevabı söylemez.
-- **Parlaklık = ikizinin başarısı:** hedefin parlaklığı, öğrettiğin kavramlarda ikizinin sınav başarısıdır.
-- **Beceri konuları (gitar):** ikizine nasıl çaldığını anlatırsın (parmak yerleşimi, geçiş, tempo); ilerlemen "Pratik kaydı" ile görünür olur: temiz çalabildiğin en yüksek tempo (BPM) kaydedilir, Gözcü bir öncekiyle karşılaştırır ve tempo eğrisi çizilir.
-
-- **Tek konuyla hızlı başlangıç:** konuyu yaz, ekip 21 günlük yol haritasını çıkarır (Gökyüzü → Yol haritan).
-- **Ajan sahnesi:** Ekip sekmesinde avatarlar, konuşan ajan parlaması, "yazıyor…" göstergesi, balonlu akış, devir/karar/koruma etiketleri.
-- **İlerlemeyi sen belirlersin:** Bugün sekmesinde görevleri işaretle ve "Günü bitir"; ya da İkizin → *Canlı demo kontrolü* ile "N gün geçti, planın %X'ini yaptım".
-- **Ajanlarla sohbet:** Ekip → Sohbet: bir ajan seç (Rehber, Yörüngeci, Gözcü…) ya da "Otomatik" bırak; ajan oturumunun gerçek verilerine (ilerleme, yıldızlar, hedef) dayanarak yanıtlar.
-- **Sesli anlatım:** İkizine öğret ekranında 🎙️ (web: Chrome/Safari, tr-TR). Konuşma metne çevrilir, düzenlenir, sonra yazılı metinle aynı güvenlik + Konu Bekçisi denetiminden geçer.
-
-## Güvenlik ve etik (`guvenlik.py`)
-
-Kişisel veri (TC kimlik, telefon, e-posta, IBAN, kart) engellenir; prompt injection ve zararlı içerik denetlenir; kullanıcı metni modele "güvenilmez veri" olarak verilir; ödev yaptırma reddedilir (ekip anlamana yardım eder, ödevi yapmaz); boyut ve hız sınırı vardır; İkiz'in yapay zekâ olduğu belirtilir; "Verilerimi sil" tüm oturumu siler. Bu kural tabanlı **ilk savunma hattıdır**; üretimde bir moderasyon modeliyle desteklenmelidir.
-
-## Çalıştırma
+Python 3.10 ya da üstü gerekir.
 
 ```bash
-pip install -r requirements.txt
-python3 llm_kontrol.py                  # (isteğe bağlı) gerçek model bağlantısını dene
+git clone https://github.com/senemdeniz/KTU-AI---PLUS.git ikiz
+cd ikiz
+python3 -m pip install -r requirements.txt
 python3 -m uvicorn server:app --port 8000
 ```
 
-Sonra tarayıcıda **http://127.0.0.1:8000** adresini aç: tam web arayüzü sunucudan gelir (`web/`, derleme gerektirmez). Akış: karşılama → profil → ikizin oluşuyor (ajanlar canlı) → ekibin neler yapabileceği → uygulama (Gökyüzü, Yol haritası + kaynaklar, Bugün, Ekip, İkizin, İkizine öğret, Veriler ve güvenlik).
+Tarayıcıda **http://127.0.0.1:8000** adresini aç. Ardından:
 
-Mobil uygulama (Expo) aynı API'yi kullanır: `cd mobile && npm install && EXPO_PUBLIC_API_URL=http://127.0.0.1:8000 npx expo start --web`.
+1. **Kayıt ol:** kullanıcı adı ve şifre seç.
+2. Kendini tanıt: konu, süre, avatar. Ekip gökyüzünü canlı olarak kurar.
+3. İstediğin kadar **takımyıldız** (konu) aç. Logoya tıklayınca hepsi görünür.
+4. **Çıkış yap**, sonra aynı kullanıcı adı ve şifreyle **giriş yap**: kaldığın yerden devam edersin.
 
-**Model sağlayıcısı** (yalnızca sunucu ortam değişkeni; anahtarı asla sohbete/koda yazma):
+Kayıt olmadan denemek için ana sayfadaki **“Kayıt olmadan canlı demoyu izle”** bağlantısını kullan.
 
-| Değişken | Anlamı |
-|---|---|
-| `ANTHROPIC_API_KEY` | Claude |
-| `HF_TOKEN` (+ `LLM_MODEL`) | Hugging Face router (OpenAI uyumlu, `https://router.huggingface.co/v1`) |
-| `LLM_API_KEY` + `LLM_BASE_URL` | Herhangi bir OpenAI uyumlu uç nokta |
-| `LLM_PROVIDER=mock` | Demo modunu zorla |
-| `IKIZ_DB` | Kalıcı SQLite yolu (Railway'de volume'a bağla) |
-| `AJAN_GECIKME` | Akıştaki adım gecikmesi, sn (varsayılan 0.7) |
+> **GitHub Codespaces:** Repo sayfasında **Code → Codespaces → Create codespace** seç. Kurulum kendiliğinden yapılır, sunucu başlar ve uygulama tarayıcıda açılır.
 
-Hiçbiri yoksa **demo modu** çalışır: içerik elle yazılmış (Türev ve Gitar için özel), akış ve karar mantığı gerçektir.
+---
 
-Testler: `python -m pytest -q` (33 test). API sözleşmesi: [`docs/API.md`](docs/API.md). Jüri anlatımı: [`DEMO.md`](DEMO.md).
+## Ajanları gerçek dil modeline bağlama
 
-## Görüntü ve ses (İkizine öğret)
+Model anahtarı yoksa uygulama **demo modunda** çalışır: içerik hazırdır, ama akış ve karar mantığı gerçektir. Gerçek modele bağlamak için:
 
-İkizine fotoğrafla (ders notu, şema, gitarda el pozisyonu) ve sesle anlatabilirsin. Görüntü ve ses **saklanmaz**; model yalnızca yazıya döker, sen düzeltip eklersin ve metin yine güvenlik + Konu Bekçisi denetiminden geçer. Fotoğraf tarayıcıda küçültülüp yeniden kodlanır (EXIF/konum silinir).
+```bash
+cp .env.example .env
+```
 
-| Sağlayıcı | Görüntü | Ses | Ortam değişkenleri |
+`.env` dosyasını aç ve `LLM_API_KEY=` satırına anahtarını yaz. Ücretsiz seçenekler:
+
+| Sağlayıcı | Anahtar | `.env` |
+|---|---|---|
+| **Groq** (önerilen) | console.groq.com/keys | `LLM_BASE_URL=https://api.groq.com/openai/v1`<br>`LLM_MODEL=openai/gpt-oss-120b` |
+| Google Gemini | aistudio.google.com/apikey | `LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/`<br>`LLM_MODEL=` güncel “flash” modeli |
+| Anthropic Claude | console.anthropic.com | `ANTHROPIC_API_KEY=...` |
+
+Ardından bağlantıyı dene ve sunucuyu başlat:
+
+```bash
+python3 llm_kontrol.py
+python3 -m uvicorn server:app --port 8000
+```
+
+Sol alttaki rozet **“Demo modu”** yerine **“Canlı model: …”** gösterir.
+
+- **`.env` GitHub'a gitmez** (`.gitignore`'da). Anahtarını koda, sohbete ya da ekran görüntüsüne koyma.
+- **Codespaces'te:** anahtarı **Settings → Secrets and variables → Codespaces** altına `LLM_API_KEY`, `LLM_BASE_URL` ve `LLM_MODEL` olarak ekle.
+- **Görüntü ve ses:**
+  - Fotoğraftan öğretmek için `LLM_VISION_MODEL` değişkenine sağlayıcının görüntü modelini yaz.
+  - Groq'ta sesli anlatım sunucudaki Whisper ile kendiliğinden açılır. Diğer sağlayıcılarda tarayıcının ses tanıması kullanılır.
+- **Model yanıt vermezse ya da bozuk JSON döndürürse** ilgili ajan hazır içeriğe düşer ve bunu akışta söyler. Uygulama model yüzünden çökmez.
+
+---
+
+## Ajan ekibi
+
+Her ajanın tek bir işi vardır. Uygulamada **Ekip** sekmesinde her ajanın kartı durur; karta dokununca o ajanın senin için ürettiği çıktı açılır.
+
+| Ajan | Ne işe yarar | Ne zaman çalışır | Tür |
 |---|---|---|---|
-| Groq (ücretsiz katman) | evet | evet (Whisper) | `LLM_API_KEY`, `LLM_BASE_URL=https://api.groq.com/openai/v1`, `LLM_MODEL=openai/gpt-oss-120b`, `LLM_VISION_MODEL=<Groq'un görüntü modeli>`; ses için `STT_MODEL` gerekmez (`whisper-large-v3-turbo`) |
-| Google Gemini | evet | tarayıcı ses tanıması | `LLM_API_KEY`, `LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/`, `LLM_MODEL=<gemini modeli>` |
-| Claude | evet | tarayıcı ses tanıması | `ANTHROPIC_API_KEY` |
+| Gözlemevi | Ekibin yöneticisi: isteğini doğru ajana iletir, büyük kararları önce sana sorar | Her adımda | Yapay zekâ + kural |
+| Astronom | Konunu, seviyeni ve ayırabileceğin zamanı okuyup ekibe aktarır | Kayıtta, profil değişince | Yapay zekâ |
+| Kutup Yıldızı | Olası hedefleri puanlar; seçtiğin sürede ulaşabileceğin en anlamlı tekini seçer | Yeni konu açınca | Yapay zekâ |
+| Haritacı | Hedefi seçtiğin gün sayısına göre küçük günlük görevlere böler | Kurulumda, süre değişince | Yapay zekâ |
+| Kaynak Avcısı | Konunun türüne göre güvenilir kaynak bulur, en uygun tekini gerekçesiyle seçer; bağlantı uydurmaz | Kurulumda, istediğinde | Yapay zekâ + kural |
+| Gözcü | Bitirdiklerini rotanla karşılaştırıp riski ölçer (tahmin değil, hesap) | Her gün sonunda | Kural |
+| Yörüngeci | Geride kalınca en hafif çözümü bulur; büyük değişikliği onayına sunar | Geride kalınca | Yapay zekâ |
+| Rehber | Suçlamadan, bugün yapabileceğin tek net adımı söyler | Her gün, sorduğunda | Yapay zekâ |
+| Konu Bekçisi | İkizine anlattığının konuyla ilgisini denetler; konu dışını ve kişisel bilgiyi geçirmez | Her anlatımda | Yapay zekâ + kural |
+| Kaşif | Sınav soruları ve doğru cevapları hazırlar, cevapları ikizden saklar | Sınavda | Yapay zekâ |
+| İkiz | Yalnızca senin cümlelerini bilir ve sınavda onlarla cevap verir | Öğrettiğinde | Yapay zekâ |
+| Hakem | Cevapları bağımsız puanlar, hatalı cümleni gösterir, kaynağın doğru bölümüne yönlendirir | Sınavdan sonra | Yapay zekâ + kural |
 
-Model adları sık değişir: Groq'un güncel görüntü modeli için console.groq.com/docs/vision, Gemini için ai.google.dev/gemini-api/docs/openai sayfasına bak. `/health` çıktısındaki `yetenekler` alanı hangi özelliklerin açık olduğunu gösterir. Tarayıcı ses tanıması yoksa (ör. Firefox) ses, sunucudaki Whisper'a gider.
+**Neden çok ajan?** Bilgi ayrımı için:
 
-## Güvenlik önlemleri (özet)
+- Kaşif doğru cevabı bilir, İkiz bilmez.
+- Hakem, İkiz'den bağımsız değerlendirir.
+- Gözcü'nün ölçümü kuraldır, modelin keyfine bırakılmaz.
+- Plan değiştiren her karar kullanıcı onayından geçer.
 
-Unicode normalleştirme (tam genişlik rakam, sıfır genişlikli karakter, Kiril/Yunan benzer harf), kişisel veri ve talimat enjeksiyonu denetimi, Konu Bekçisi, Hakem ipucu sızıntı koruması, 128 bitlik oturum kimliği, IP başına hız sınırı, 20 KB gövde sınırı, güvenlik başlıkları (CSP, nosniff, frame-ancestors none), arayüzde yalnızca `textContent` (XSS yok), dış bağlantılar `noopener noreferrer`. Üretimde `IKIZ_CORS` ile izinli kökenleri kısıtla ve HTTPS arkasında çalıştır.
+### Konuya özgü kaynak stratejisi
+
+Türk birine İspanyolca öğretmek ile bir öğrenciye veri yapıları öğretmek aynı iş değildir. Kaynak Avcısı önce konunun türünü belirler:
+
+| Tür | Örnek | Strateji |
+|---|---|---|
+| Dil | İspanyolca, Almanca | 1) Türkçe açıklayan kaynak (Ankara Üni. açık ders)<br>2) İngilizce üzerinden köprü (Instituto Cervantes AVE)<br>3) A2'den sonra hedef dilde malzeme |
+| Teknik | Veri Yapıları, programlama | Kalite önce gelir: uygulamalı İngilizce kaynak ana kaynaktır (Runestone). Türkçe ders destek olarak kalır. |
+| Akademik | Türev, Olasılık | Çözümlü örnekli ders notu önce gelir. Dil ikincildir. |
+| Beceri | Gitar | Adım adım video ders ve metronom gibi bir pratik aracı |
+
+- Elle doğrulanmış kaynak listesi olmayan konularda genel web araması yapılmaz. Bunun yerine güvenilir platformların (MIT OCW, Khan Academy, Coursera, Ankara Üni. açık ders) konu sayfasına yönlendirilir.
+- İngilizce platformlarda konu İngilizce karşılığıyla aranır ("İspanyolca" → "Spanish").
+
+---
+
+## Hesaplar ve güvenlik
+
+- **Hesap:** Şifreler `scrypt` ile tuzlanıp saklanır; düz metin hiçbir yerde durmaz. Giriş, yalnızca sunucunun okuyabildiği bir çerezle tutulur (`HttpOnly`, `SameSite=Lax`; HTTPS'te `Secure`). Çerezin veritabanında yalnızca SHA-256 özeti durur.
+- **Erişim:**
+  - Bir hesabın gökyüzüne yalnızca sahibi erişir; oturum kimliğini bilmek yetmez.
+  - Hatalı giriş denemeleri sınırlıdır.
+  - Yazma istekleri başka bir siteden gelemez (CSRF koruması).
+- **İkizine öğret:**
+  - Kişisel veri (TC kimlik, telefon, e-posta, IBAN, kart) modele ulaşmaz.
+  - Talimat enjeksiyonu ve benzer harf ya da gizli karakterle saklama denemeleri yakalanır.
+  - Kullanıcı metni modele “güvenilmez veri” olarak verilir.
+  - Hakem ipucunda cevabı söylemez.
+- **Sunucu ve arayüz:**
+  - IP başına hız ve gövde sınırı vardır; güvenlik başlıkları gönderilir (CSP, `nosniff`, `frame-ancestors 'none'`).
+  - Arayüz metni yalnızca `textContent` ile yazar (XSS yok).
+  - Kullanıcının eklediği bağlantılarda SSRF koruması vardır.
+- **Görüntü ve ses saklanmaz:** Model yalnızca yazıya döker; metni sen düzeltip eklersin.
+- **Ayarlar → Hesabımı ve verilerimi sil:** her şeyi kalıcı olarak siler.
+
+---
+
+## Proje yapısı
+
+| Dosya | İçerik |
+|---|---|
+| `server.py` | FastAPI uç noktaları, hesap/erişim denetimi, güvenlik katmanı, web arayüzünü sunar |
+| `hesap.py` | Kayıt, giriş, çerez belirteçleri |
+| `gozlemevi.py` | Orkestratör: ajanların akışı, gökyüzü görünümü |
+| `ikiz_ajan.py` | Model sağlayıcı katmanı (Groq/Gemini/OpenAI uyumlu, Claude, demo), istemler, ikiz/rota hesabı |
+| `kaynak_avcisi.py` | Konuya özgü kaynak stratejisi, doğrulanmış kaynaklar, bağlantı denetimi |
+| `ogret_ajani.py` | Kaşif, İkiz ve Hakem: kısıtlı bilgiyle sınav |
+| `konu_bekcisi.py`, `guvenlik.py` | İçerik denetimi |
+| `icerik.py` | Demo modunun elle yazılmış yol haritaları |
+| `store.py` | SQLite kalıcılığı (`IKIZ_DB`, varsayılan `ikiz.db`) |
+| `ayar.py` | `.env` yükleyici |
+| `web/` | Arayüz (derleme gerektirmez: düz HTML, CSS, JavaScript modülleri) |
+
+API sözleşmesi: [`docs/API.md`](docs/API.md). Jüri sunumu için adım adım akış: [`DEMO.md`](DEMO.md).
+
+## Testler
+
+```bash
+python3 -m pip install -r requirements-dev.txt
+python3 -m pytest -q
+```
+
+Testler şunları kapsar:
+
+- Hesap akışı: kayıt, giriş, çıkış, başkasının gökyüzüne erişememe, CSRF.
+- Ajan akışları ve güvenlik denetimleri.
+- **Gerçek model yolunun uçtan uca testi (anahtar gerekmez):** `test_model_yolu.py`, yerel ve OpenAI uyumlu sahte bir model sunucusu açar.
+  - Önce on iki ajanın hepsini gerçek HTTP yolundan geçirir.
+  - Sonra modelin boş, bozuk, yanlış biçimli ya da hatalı yanıt verdiği durumlarda uygulamanın çökmediğini doğrular.
+
+GitHub Actions her gönderimde testleri çalıştırır.
 
 ## Bilinen sınırlar
 
-- LLM yolu (Claude / Hugging Face) gerçek servislere karşı henüz denenmedi; yalnızca demo modu ve sahte uç nokta test edildi. Hugging Face'te JSON çıktı güvenilirliği ve Türkçe kalite modele göre denenmelidir. Ücretsiz HF hesaplarında aylık kredi yoktur (PRO: aylık 2$).
-- Elle doğrulanmış kaynak ve kavram bölümleri şimdilik Veri Yapıları, Türev ve Gitar için var; diğer konularda genel web araması yerine güvenilir platformların (MIT OCW, Khan Academy, Coursera, Vikipedi) konu sayfasına yönlendirilir. JustinGuitar'ın ücret bilgisi doğrulanmadı. Rakamla yazılmış telefon ("sıfır beş yüz…") ve kodlanmış (base64) kişisel veri yakalanmaz.
-- *Görev ver* yönlendirmesi anahtar kelimelidir; `kaynak` yalnızca kaynak türü önerir, bağlantı uydurmaz.
-- Eski Streamlit demosu (`app.py`) ve `examples_yks_ayt_matematik/` örnek içerik paketi olarak duruyor; ana ürün değildir.
-- 18 yaş altı için veli onayı akışı yok; destek hattı numaraları (112, ALO 183) yayından önce doğrulanmalı.
+- Gerçek sağlayıcılarla (Groq, Gemini, Claude) yanıt kalitesi modele göre değişir. Hazır içeriğe düşme yolu test edildi; Türkçe kalite canlı modelle denenmelidir.
+- Elle doğrulanmış kaynaklar şimdilik Veri Yapıları, Türev, Gitar ve İspanyolca için var.
+- Kurallar ilk savunma hattıdır; üretimde bir moderasyon modeliyle desteklenmelidir. 18 yaş altı için veli onayı akışı yok.
+- Şifre sıfırlama yok (e-posta toplanmıyor). Şifreni unutursan yeni hesap açman gerekir.
+
+## Lisans
+
+[LICENSE](LICENSE)
