@@ -17,12 +17,16 @@ MOCK modda çalışır, böylece arayüz ve demo API olmadan da geliştirilebili
 from __future__ import annotations
 
 import json
+import logging
 import os
 import random
+import re
+import time
 from dataclasses import asdict, dataclass, field, fields
 from typing import Literal
 
-MODEL = "claude-sonnet-5-5"
+MODEL = "claude-sonnet-5-5"          # Anthropic için varsayılan; ANTHROPIC_MODEL ile değiştirilebilir
+log = logging.getLogger("ikiz.model")
 
 # ---------------------------------------------------------------------------
 # 1) VERİ ŞEMASI
@@ -366,82 +370,151 @@ def provider() -> str | None:
     return None
 
 
+def anthropic_modeli() -> str:
+    return os.environ.get("ANTHROPIC_MODEL") or MODEL
+
+
 def model_name() -> str:
     p = provider()
     if p == "anthropic":
-        return MODEL
+        return anthropic_modeli()
     if p == "openai_compat":
         return os.environ.get("LLM_MODEL") or os.environ.get("HF_MODEL") or "openai/gpt-oss-120b"
     return "demo"
 
 
 def _json_cikar(text: str) -> dict:
-    """Modelin cevabından ilk JSON nesnesini çıkarır (kod bloğu, açıklama ya da düşünme metni olsa da)."""
-    text = (text or "").strip()
-    if text.startswith("```"):
-        text = text.split("```")[1].removeprefix("json").strip()
-    a, b = text.find("{"), text.rfind("}")
-    if a < 0 or b <= a:
+    """Modelin cevabından JSON nesnesini çıkarır. Kod bloğu, öncesinde ya da sonrasında açıklama, düşünme metni
+    olsa da çalışır; birden çok nesne varsa sonuncusu (asıl cevap) alınır."""
+    text = re.sub(r"```[A-Za-z]*", "", text or "")
+    cozucu = json.JSONDecoder()
+    bulunan: dict | None = None
+    i = text.find("{")
+    while i >= 0:
+        try:
+            nesne, son = cozucu.raw_decode(text, i)
+        except json.JSONDecodeError:
+            i = text.find("{", i + 1)
+            continue
+        if isinstance(nesne, dict):
+            bulunan = nesne
+        i = text.find("{", son)
+    if bulunan is None:
+        j = text.find("[")
+        if j >= 0:
+            try:
+                dizi, _ = cozucu.raw_decode(text, j)
+                bulunan = next((x for x in dizi if isinstance(x, dict)), None) if isinstance(dizi, list) else None
+            except json.JSONDecodeError:
+                pass
+    if bulunan is None:
         raise ValueError("cevapta JSON yok")
-    return json.loads(text[a:b + 1])
+    return bulunan
+
+
+def _anahtar() -> str:
+    return os.environ.get("LLM_API_KEY") or os.environ.get("HF_TOKEN", "")
+
+
+_TEKRAR_KODLARI = {429, 500, 502, 503, 504}
+
+
+def _post(url: str, govde: bytes, icerik_turu: str, zaman_asimi: float) -> dict:
+    """OpenAI uyumlu uç noktaya POST. Hız sınırı (429) ve geçici sunucu hatalarında bekleyip yeniden dener
+    (LLM_YENIDEN_DENEME, varsayılan 2). Hata metnindeki API anahtarı maskelenir."""
+    import urllib.error
+    import urllib.request
+    key = _anahtar()
+    basliklar = {"Content-Type": icerik_turu, "Authorization": f"Bearer {key}", "User-Agent": "ikiz/2.0", "Accept": "application/json"}
+    tekrar = max(0, int(os.environ.get("LLM_YENIDEN_DENEME", "2")))
+    for deneme in range(tekrar + 1):
+        try:
+            istek = urllib.request.Request(url, data=govde, method="POST", headers=basliklar)
+            with urllib.request.urlopen(istek, timeout=zaman_asimi) as r:
+                return json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            try:
+                ayrinti = e.read().decode("utf-8", "replace")[:300]
+            except Exception:  # noqa: BLE001
+                ayrinti = ""
+            if key:
+                ayrinti = ayrinti.replace(key, "***")
+            if e.code in _TEKRAR_KODLARI and deneme < tekrar:
+                try:
+                    bekle = float(e.headers.get("retry-after") or 0) or 2.0 * (deneme + 1)
+                except ValueError:
+                    bekle = 2.0 * (deneme + 1)
+                time.sleep(min(bekle, 20.0))
+                continue
+            raise LLMError(f"HTTP {e.code}: {ayrinti}") from e
+        except urllib.error.URLError as e:
+            raise LLMError(f"bağlantı hatası: {e.reason}") from e
+        except json.JSONDecodeError as e:
+            raise LLMError("model uç noktası JSON olmayan bir yanıt verdi") from e
+        except Exception as e:  # noqa: BLE001
+            raise LLMError(f"model uç noktasına ulaşılamadı: {type(e).__name__}: {e}") from e
+    raise LLMError("model uç noktası yanıt vermedi")
+
+
+def _dusunen_model_mi(model: str) -> bool:
+    """Önce düşünüp sonra yanıt veren modeller (Groq'taki gpt-oss gibi) düşünmeye token harcar."""
+    return "gpt-oss" in model
+
+
+def _cevap_metni(data: dict) -> str:
+    try:
+        secim = data["choices"][0]
+        icerik = secim["message"].get("content") or ""
+    except (KeyError, IndexError, TypeError, AttributeError) as e:
+        raise LLMError("model cevabı beklenen biçimde değil") from e
+    if not icerik.strip() and secim.get("finish_reason") == "length":
+        raise LLMError("model token bütçesini cevap yazmadan bitirdi (finish_reason=length)")
+    return icerik
 
 
 def _openai_compat(system: str, payload: dict, max_tokens: int) -> str:
-    import urllib.request
-    base = (os.environ.get("LLM_BASE_URL") or "https://router.huggingface.co/v1").rstrip("/")
-    key = os.environ.get("LLM_API_KEY") or os.environ.get("HF_TOKEN", "")
-    body = json.dumps({
-        "model": model_name(), "max_tokens": max_tokens, "temperature": 0.3,
-        "messages": [{"role": "system", "content": system},
-                     {"role": "user", "content": json.dumps(payload, ensure_ascii=False)}],
-    }).encode()
-    req = urllib.request.Request(base + "/chat/completions", data=body, method="POST",
-                                 headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}",
-                                          "User-Agent": "ikiz/2.0 (+python-urllib)", "Accept": "application/json"})
-    import urllib.error
+    model = model_name()
+    govde = {"model": model, "temperature": 0.3, "max_tokens": max(max_tokens, 1024),
+             "messages": [{"role": "system", "content": system},
+                          {"role": "user", "content": json.dumps(payload, ensure_ascii=False)}]}
+    if _dusunen_model_mi(model):
+        govde["reasoning_effort"] = "low"        # cevaba token kalsın, gecikme düşsün
+    data = _post(_taban() + "/chat/completions", json.dumps(govde).encode(), "application/json",
+                 float(os.environ.get("LLM_TIMEOUT", "90")))
+    return _cevap_metni(data)
+
+
+def _anthropic_mesaj(system: str, icerik, max_tokens: int) -> str:
     try:
-        with urllib.request.urlopen(req, timeout=float(os.environ.get("LLM_TIMEOUT", "90"))) as r:
-            data = json.loads(r.read())
-    except urllib.error.HTTPError as e:
-        try:
-            ayrinti = e.read().decode("utf-8", "replace")[:300]
-        except Exception:  # noqa: BLE001
-            ayrinti = ""
-        if key:
-            ayrinti = ayrinti.replace(key, "***")
-        raise LLMError(f"HTTP {e.code}: {ayrinti}") from e
-    except urllib.error.URLError as e:
-        raise LLMError(f"bağlantı hatası: {e.reason}") from e
+        import anthropic
+    except ModuleNotFoundError as e:
+        raise LLMError("anthropic paketi kurulu değil: python3 -m pip install anthropic") from e
+    try:
+        msg = anthropic.Anthropic().messages.create(model=anthropic_modeli(), max_tokens=max_tokens, system=system,
+                                                    messages=[{"role": "user", "content": icerik}])
     except Exception as e:  # noqa: BLE001
-        raise LLMError(f"model uç noktasına ulaşılamadı: {type(e).__name__}: {e}") from e
-    try:
-        return data["choices"][0]["message"]["content"] or ""
-    except (KeyError, IndexError, TypeError) as e:
-        raise LLMError("model cevabı beklenen biçimde değil") from e
+        kod = getattr(e, "status_code", None)
+        raise LLMError(f"HTTP {kod}: {type(e).__name__}" if kod else f"Anthropic çağrısı başarısız: {type(e).__name__}") from e
+    return "".join(b.text for b in msg.content if b.type == "text")
 
 
 def llm_json(system: str, payload: dict, max_tokens: int = 2000) -> dict:
-    """System prompt + JSON girdi → JSON çıktı. Sağlayıcı yoksa mock döner; çağrı başarısızsa LLMError."""
+    """System prompt + JSON girdi → JSON çıktı. Sağlayıcı yoksa demo içerik döner; çağrı başarısızsa LLMError."""
     p = provider()
     if p is None:
         return _mock(system, payload)
-    for deneme in range(2):                     # bozuk JSON için bir kez daha dene
-        if p == "anthropic":
+    try:
+        for deneme in range(2):                     # bozuk JSON için bir kez daha dene
+            text = (_anthropic_mesaj(system, json.dumps(payload, ensure_ascii=False), max_tokens) if p == "anthropic"
+                    else _openai_compat(system, payload, max_tokens))
             try:
-                import anthropic  # pip install anthropic
-                msg = anthropic.Anthropic().messages.create(
-                    model=MODEL, max_tokens=max_tokens, system=system,
-                    messages=[{"role": "user", "content": json.dumps(payload, ensure_ascii=False)}])
-            except Exception as e:  # noqa: BLE001
-                raise LLMError(f"Anthropic çağrısı başarısız: {type(e).__name__}") from e
-            text = "".join(b.text for b in msg.content if b.type == "text")
-        else:
-            text = _openai_compat(system, payload, max_tokens)
-        try:
-            return _json_cikar(text)
-        except (ValueError, json.JSONDecodeError):
-            if deneme == 1:
-                raise LLMError("model geçerli JSON döndürmedi")
+                return _json_cikar(text)
+            except ValueError:
+                if deneme == 1:
+                    raise LLMError("model geçerli JSON döndürmedi") from None
+    except LLMError as e:
+        log.warning("Model çağrısı başarısız (%s): %s", model_name(), e)   # anahtar zaten maskeli
+        raise
     raise LLMError("model geçerli JSON döndürmedi")
 
 
@@ -563,15 +636,46 @@ def _mock(system: str, payload: dict) -> dict:
 # 5) AJAN ADIMLARI — arayüz bu fonksiyonları çağırır
 # ---------------------------------------------------------------------------
 
+_GOREV_TURLERI = {"learn", "practice", "teach", "reflect"}
+
+
+def _donustur(tur: str, v):
+    """Model "3" gibi metin sayılar ya da yanlış türler döndürebilir; alanın beklediği türe çevirir."""
+    tur = tur.replace(" ", "")
+    if tur == "int":
+        return int(float(v))
+    if tur in ("float", "Level"):
+        return float(v)
+    if tur == "bool":
+        return v if isinstance(v, bool) else str(v).strip().lower() in ("true", "1", "evet", "yes")
+    if tur == "str":
+        return str(v)
+    if tur == "str|None":
+        return None if v is None else str(v)
+    if tur == "TaskType":
+        return v if v in _GOREV_TURLERI else "practice"
+    if tur == "list[str]":
+        return [str(x) for x in v] if isinstance(v, list) else [str(v)]
+    if tur == "list[int]":
+        return [int(float(x)) for x in v] if isinstance(v, list) else []
+    if tur == "dict[str,Level]":
+        if not isinstance(v, dict):
+            raise TypeError("sözlük bekleniyordu")
+        return {str(k): float(x) for k, x in v.items()}
+    if tur.startswith("list[") and not isinstance(v, list):
+        raise TypeError("liste bekleniyordu")
+    return v
+
+
 def _sinif(cls, d: dict):
-    """Model çıktısından dataclass kurar: bilinmeyen alanları atar, eksik alan varsa LLMError verir."""
+    """Model çıktısından dataclass kurar: bilinmeyen alanları atar, türleri düzeltir, eksik alan varsa LLMError verir."""
     if not isinstance(d, dict):
         raise LLMError(f"{cls.__name__} için nesne beklenirken {type(d).__name__} geldi")
-    bilinen = {f.name for f in fields(cls)}
+    turler = {f.name: str(f.type) for f in fields(cls)}
     try:
-        return cls(**{k: v for k, v in d.items() if k in bilinen})
-    except TypeError as e:
-        raise LLMError(f"{cls.__name__} eksik alan: {e}") from e
+        return cls(**{k: _donustur(turler[k], v) for k, v in d.items() if k in turler})
+    except (TypeError, ValueError) as e:
+        raise LLMError(f"{cls.__name__} alanları geçersiz: {e}") from e
 
 
 def _liste(d: dict, anahtar: str) -> list:
@@ -672,7 +776,7 @@ if __name__ == "__main__":
 # ---------------------------------------------------------------------------
 # Görüntü: LLM_VISION_MODEL (yoksa LLM_MODEL) görüntü destekli bir model olmalı.
 #   Groq:   LLM_VISION_MODEL=<Groq'un görüntü destekli modeli>  (console.groq.com/docs/vision)
-#   Gemini: LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/  LLM_MODEL=<gemini modeli> (görüntü + ses)
+#   Gemini: LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/  LLM_MODEL=<gemini modeli> (görüntü; ses tarayıcıda tanınır)
 #   Claude: ANTHROPIC_API_KEY (görüntü destekler; ses desteklemez)
 # Ses: OpenAI uyumlu /audio/transcriptions (Groq: whisper-large-v3-turbo). STT_MODEL ile değiştirilebilir.
 
@@ -681,9 +785,16 @@ def _taban() -> str:
 
 
 def yetenekler() -> dict:
+    """Bu yapılandırmada fotoğraftan ve sesten öğretme açık mı?"""
     p = provider()
-    gorsel_model = os.environ.get("LLM_VISION_MODEL") or (MODEL if p == "anthropic" else os.environ.get("LLM_MODEL"))
-    gorsel = p == "anthropic" or (p == "openai_compat" and bool(os.environ.get("LLM_VISION_MODEL") or "gemini" in (os.environ.get("LLM_MODEL") or "")))
+    if p == "anthropic":
+        gorsel, gorsel_model = True, anthropic_modeli()
+    elif p == "openai_compat":
+        gorsel_model = os.environ.get("LLM_VISION_MODEL") or os.environ.get("LLM_MODEL")
+        gorsel = bool(os.environ.get("LLM_VISION_MODEL") or "gemini" in (os.environ.get("LLM_MODEL") or "").lower())
+    else:
+        gorsel, gorsel_model = False, None
+    # Sunucuda ses tanıma yalnızca /audio/transcriptions sunan sağlayıcılarda (Groq: Whisper) açılır.
     stt = os.environ.get("STT_MODEL") or ("whisper-large-v3-turbo" if "groq.com" in _taban() else None)
     ses = p == "openai_compat" and bool(stt)
     return {"gorsel": gorsel, "gorsel_model": gorsel_model if gorsel else None, "ses": ses, "ses_model": stt if ses else None}
@@ -691,57 +802,40 @@ def yetenekler() -> dict:
 
 def gorsel_json(system: str, metin: str, veri_b64: str, mime: str, max_tokens: int = 700) -> dict:
     """Görüntü + metin → JSON. Görüntü sunucuda saklanmaz, yalnızca modele iletilir."""
-    import urllib.request, urllib.error
     p = provider()
     if p is None or not yetenekler()["gorsel"]:
         raise LLMError("Görüntü destekli model yapılandırılmadı.")
     if p == "anthropic":
-        try:
-            import anthropic
-            msg = anthropic.Anthropic().messages.create(model=MODEL, max_tokens=max_tokens, system=system, messages=[{"role": "user", "content": [
-                {"type": "image", "source": {"type": "base64", "media_type": mime, "data": veri_b64}}, {"type": "text", "text": metin}]}])
-        except Exception as e:  # noqa: BLE001
-            raise LLMError(f"Anthropic görüntü çağrısı başarısız: {type(e).__name__}") from e
-        return _json_cikar("".join(b.text for b in msg.content if b.type == "text"))
-    key = os.environ.get("LLM_API_KEY") or os.environ.get("HF_TOKEN", "")
-    body = json.dumps({"model": os.environ.get("LLM_VISION_MODEL") or model_name(), "max_tokens": max_tokens, "temperature": 0.2,
-                       "messages": [{"role": "system", "content": system}, {"role": "user", "content": [
-                           {"type": "text", "text": metin}, {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{veri_b64}"}}]}]}).encode()
-    req = urllib.request.Request(_taban() + "/chat/completions", data=body, method="POST",
-                                 headers={"Content-Type": "application/json", "Authorization": f"Bearer {key}", "User-Agent": "ikiz/2.0"})
+        text = _anthropic_mesaj(system, [{"type": "image", "source": {"type": "base64", "media_type": mime, "data": veri_b64}},
+                                         {"type": "text", "text": metin}], max_tokens)
+    else:
+        model = os.environ.get("LLM_VISION_MODEL") or model_name()
+        govde = {"model": model, "temperature": 0.2, "max_tokens": max(max_tokens, 1024),
+                 "messages": [{"role": "system", "content": system}, {"role": "user", "content": [
+                     {"type": "text", "text": metin}, {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{veri_b64}"}}]}]}
+        if _dusunen_model_mi(model):
+            govde["reasoning_effort"] = "low"
+        text = _cevap_metni(_post(_taban() + "/chat/completions", json.dumps(govde).encode(), "application/json",
+                                  float(os.environ.get("LLM_TIMEOUT", "90"))))
     try:
-        with urllib.request.urlopen(req, timeout=float(os.environ.get("LLM_TIMEOUT", "90"))) as r:
-            data = json.loads(r.read())
-    except urllib.error.HTTPError as e:
-        raise LLMError(f"HTTP {e.code}: {e.read().decode('utf-8', 'replace')[:300].replace(key, '***') if key else ''}") from e
-    except Exception as e:  # noqa: BLE001
-        raise LLMError(f"görüntü modeline ulaşılamadı: {type(e).__name__}") from e
-    try:
-        return _json_cikar(data["choices"][0]["message"]["content"] or "")
-    except (KeyError, IndexError, TypeError) as e:
+        return _json_cikar(text)
+    except ValueError as e:
         raise LLMError("görüntü modelinin cevabı beklenen biçimde değil") from e
 
 
 def ses_yaziya(ses: bytes, mime: str, dil: str = "tr") -> str:
     """Ses kaydını yazıya döker (OpenAI uyumlu /audio/transcriptions, çok parçalı form)."""
-    import urllib.request, urllib.error, uuid as _uuid
+    import uuid as _uuid
     y = yetenekler()
     if not y["ses"]:
         raise LLMError("Ses tanıma modeli yapılandırılmadı.")
-    uzanti = {"audio/webm": "webm", "audio/ogg": "ogg", "audio/mp4": "m4a", "audio/mpeg": "mp3", "audio/wav": "wav", "audio/x-wav": "wav"}.get(mime.split(";")[0], "webm")
+    tur = mime.split(";")[0]
+    uzanti = {"audio/webm": "webm", "audio/ogg": "ogg", "audio/mp4": "m4a", "audio/mpeg": "mp3", "audio/wav": "wav", "audio/x-wav": "wav"}.get(tur, "webm")
     sinir = "----ikiz" + _uuid.uuid4().hex
-    parcalar = []
-    for ad, deger in (("model", y["ses_model"]), ("language", dil), ("response_format", "json")):
-        parcalar.append(f'--{sinir}\r\nContent-Disposition: form-data; name="{ad}"\r\n\r\n{deger}\r\n'.encode())
-    parcalar.append(f'--{sinir}\r\nContent-Disposition: form-data; name="file"; filename="kayit.{uzanti}"\r\nContent-Type: {mime.split(";")[0]}\r\n\r\n'.encode() + ses + b"\r\n")
+    parcalar = [f'--{sinir}\r\nContent-Disposition: form-data; name="{ad}"\r\n\r\n{deger}\r\n'.encode()
+                for ad, deger in (("model", y["ses_model"]), ("language", dil), ("response_format", "json"))]
+    parcalar.append(f'--{sinir}\r\nContent-Disposition: form-data; name="file"; filename="kayit.{uzanti}"\r\nContent-Type: {tur}\r\n\r\n'.encode()
+                    + ses + b"\r\n")
     parcalar.append(f"--{sinir}--\r\n".encode())
-    key = os.environ.get("LLM_API_KEY") or os.environ.get("HF_TOKEN", "")
-    req = urllib.request.Request(_taban() + "/audio/transcriptions", data=b"".join(parcalar), method="POST",
-                                 headers={"Content-Type": f"multipart/form-data; boundary={sinir}", "Authorization": f"Bearer {key}", "User-Agent": "ikiz/2.0"})
-    try:
-        with urllib.request.urlopen(req, timeout=120) as r:
-            return str(json.loads(r.read()).get("text", "")).strip()
-    except urllib.error.HTTPError as e:
-        raise LLMError(f"HTTP {e.code}: ses tanıma başarısız") from e
-    except Exception as e:  # noqa: BLE001
-        raise LLMError(f"ses tanıma servisine ulaşılamadı: {type(e).__name__}") from e
+    data = _post(_taban() + "/audio/transcriptions", b"".join(parcalar), f"multipart/form-data; boundary={sinir}", 120.0)
+    return str(data.get("text", "")).strip()
