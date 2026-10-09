@@ -241,7 +241,7 @@ textarea.girdi{min-height:92px;resize:vertical}
 .ikiz-ozet h3{font-size:24px;color:var(--mavi)}
 .ikiz-yuzde{font-family:var(--baslik);font-size:40px;color:var(--mavi);letter-spacing:-.02em}
 .ikiz-gok{border:1px solid var(--cizgi);border-radius:var(--r-buyuk);background:radial-gradient(90% 120% at 50% 0%,rgba(142,162,255,.1),transparent 70%)}
-.ikiz-gok svg,.ikiz-buyuk svg{width:100%;height:auto;display:block}
+.ikiz-gok svg{width:100%;height:auto;display:block}
 .ikiz-nokta{width:14px;height:14px;border-radius:50%;justify-self:center;background:#3a4888}
 .ikiz-nokta.parlak{background:var(--mavi)}
 .ikiz-nokta.halkali{background:var(--mavi);box-shadow:0 0 0 3px var(--gece),0 0 0 5px var(--mavi)}
@@ -279,7 +279,7 @@ textarea.girdi{min-height:92px;resize:vertical}
 .canli-nokta.bos{background:var(--sis2);animation:none}
 @keyframes nabizy{70%{box-shadow:0 0 0 9px transparent}100%{box-shadow:0 0 0 0 transparent}}
 .zihin-yerlesim{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:24px;align-items:start}
-.zihin{position:relative;aspect-ratio:5/3;border:1px solid var(--cizgi);border-radius:var(--r-buyuk);background:radial-gradient(60% 60% at 50% 50%,rgba(245,215,142,.07),transparent 70%),rgba(7,11,28,.55);overflow:visible}
+.zihin{position:relative;aspect-ratio:5/3;border:1px solid var(--cizgi);border-radius:var(--r-buyuk);background:radial-gradient(60% 60% at 50% 50%,rgba(245,215,142,.07),transparent 70%),rgba(7,11,28,.55);overflow:hidden}
 .zihin-cizgi{position:absolute;inset:0;width:100%;height:100%}
 .zihin-cizgi .kol{stroke:#1f2a57;stroke-width:1.2;vector-effect:non-scaling-stroke}
 .zihin-cizgi .kol.canli{stroke:var(--altin);stroke-width:2;stroke-dasharray:6 6;animation:akis 0.9s linear infinite}
@@ -295,7 +295,7 @@ textarea.girdi{min-height:92px;resize:vertical}
 .dugum.aktif .dugum-ad,.dugum.secili .dugum-ad{color:var(--c)}
 .dugum.secili .ava{box-shadow:0 0 0 3px var(--gece),0 0 0 5px var(--c)}
 .dugum-sayi{position:absolute;top:0;right:2px;min-width:18px;height:18px;border-radius:9px;background:var(--lacivert2);border:1px solid var(--cizgi2);font-size:10px;font-weight:800;display:grid;place-items:center;color:var(--sis)}
-.dugum-balon{position:absolute;transform:translate(-50%,calc(-100% - 40px));width:max-content;max-width:240px;background:var(--lacivert2);border:1px solid var(--c);border-radius:12px;padding:8px 12px;font-size:13px;line-height:1.35;z-index:3;pointer-events:none;animation:gel .35s ease-out;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+.dugum-balon{position:absolute;transform:translate(-50%,calc(-100% - 40px));width:max-content;max-width:240px;background:var(--lacivert2);border:1px solid var(--c);border-radius:12px;padding:8px 12px;font-size:13px;line-height:1.35;z-index:3;pointer-events:none;animation:balon-gel .35s ease-out;box-shadow:0 8px 24px rgba(0,0,0,.4)}
 .zihin-lejant{position:absolute;left:14px;bottom:10px;display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--sis);z-index:1}
 .zihin-lejant span{display:inline-flex;align-items:center;gap:6px}
 .akis-renk{width:16px;height:3px;border-radius:2px;display:inline-block}
@@ -360,7 +360,6 @@ textarea.girdi{min-height:92px;resize:vertical}
 .logo-dugme:hover{background:rgba(245,215,142,.08)}
 .ana-kolon{min-width:0}
 .mobil-ust{display:none}
-.anahtar{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:15px;background:var(--gece);border:1px solid var(--cizgi);border-radius:10px;padding:10px 12px;word-break:break-all;user-select:all}
 
 /* ---------- takımyıldızların sayfası ---------- */
 .takim-izgara{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:18px}
@@ -536,3 +535,13 @@ button.ajan-kart:hover,button.ajan-kart:focus-visible{border-color:color-mix(in 
 .hata-satir:empty{display:none}
 .demo-link{margin-top:16px;display:inline-block}
 
+
+/* Zihin haritası balonu: kenardaki düğümlerde haritanın içine doğru açılır */
+.dugum-balon.sol{transform:translate(-14%,calc(-100% - 40px))}
+.dugum-balon.sag{transform:translate(-86%,calc(-100% - 40px))}
+.dugum-balon.alt{transform:translate(-50%,44px)}
+.dugum-balon.sol.alt{transform:translate(-14%,44px)}
+.dugum-balon.sag.alt{transform:translate(-86%,44px)}
+@media (max-width:600px){.dugum-balon{max-width:170px;font-size:12px}}
+@keyframes balon-gel{from{opacity:0}to{opacity:1}}   /* yalnızca saydamlık: konumlandırmayı (transform) bozmaz */
+.dugum-balon.sabit{animation:none}

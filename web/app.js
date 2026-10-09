@@ -61,14 +61,16 @@ const kok = () => $('#ana');
 const goster = (ekran, ...icerik) => { S.ekran = ekran; kok().replaceChildren(...icerik); scrollTo(0, 0); kok().focus({ preventScroll: true }); };
 
 async function tazele() {
-  if (!S.sid) return;
+  const sid = S.sid;
+  if (!sid) return;
   try {
-    const [v, o] = await Promise.all([api(`/v2/sessions/${S.sid}`), api(`/v2/sessions/${S.sid}/events?after=${S.son}`)]);
+    const [v, o] = await Promise.all([api(`/v2/sessions/${sid}`), api(`/v2/sessions/${sid}/events?after=${S.son}`)]);
+    if (S.sid !== sid) return false;         // bu arada çıkış yapıldı ya da başka bir gökyüzüne geçildi
     S.view = v;
     if (o.olaylar.length) { S.son = o.olaylar.at(-1).id; S.olaylar.push(...o.olaylar); S.yeniOlay = true; }
     return true;
   } catch (e) {
-    if (/bulunamad/.test(e.message)) { S.sid = null; location.reload(); }
+    if (S.sid === sid && /bulunamad/.test(e.message)) { S.sid = null; location.reload(); }
     return false;
   }
 }
@@ -196,7 +198,7 @@ function profil() {
     h('label', { class: 'onay' }, onay, h('span', {}, 'İkizin ve ajanlar yapay zekâdır. Yazdıklarım plan üretmek için kullanılır, istediğim an tamamen silebilirim.')),
     hata, h('div', {}, dugme));
   goster('profil', h('div', { class: 'sayfa' },
-    h('header', { class: 'ust' }, marka(), h('button', { class: 'baglanti', onclick: karsilama }, 'Geri')),
+    h('header', { class: 'ust' }, marka(), h('button', { class: 'baglanti', onclick: () => cikis() }, 'Çıkış yap')),
     h('section', { class: 'profil' },
       h('div', {}, h('h2', {}, 'Önce seni tanıyalım.'), h('p', { class: 'sis' }, 'Bu bilgiler yol haritanı ve ikizini kurar. Birkaç tıkla bitiyor.'), form),
       h('aside', {}, prev, ozet))));
@@ -206,7 +208,7 @@ function profil() {
 
 /* ---------- 2 · ikizin oluşuyor ---------- */
 const KURULUM = [['Astronom', 'Seni okuyor', 'Konunu, seviyeni ve zamanını anlıyor.'], ['Kutup Yıldızı', 'Hedefini seçiyor', 'Adayları puanlayıp en ideal tekini seçiyor.'],
-  ['Haritacı', 'Yol haritasını çiziyor', '21 günlük planı kolaydan zora yerleştiriyor.'], ['Kaynak Avcısı', 'Kaynakları tarıyor', 'Sana en uygun tek kaynağı gerekçesiyle seçiyor.'],
+  ['Haritacı', 'Yol haritasını çiziyor', 'Planı seçtiğin süreye kolaydan zora yerleştiriyor.'], ['Kaynak Avcısı', 'Kaynakları tarıyor', 'Sana en uygun tek kaynağı gerekçesiyle seçiyor.'],
   ['Gözcü', 'Rotanı çiziyor', 'Planı aksatmazsan her gün nerede olacağını hesaplıyor.'], ['Rehber', 'Seni karşılıyor', 'İlk günün için tek net adım hazırlıyor.']];
 function kurulum() {
   const liste = h('ol', { class: 'adimlar' });
@@ -225,12 +227,16 @@ function kurulum() {
     const hazir = v?.durum === 'hazir' && v.alanlar.every((a) => a.hazir);
     const idx = KURULUM.findLastIndex(([a]) => gorulen.has(a));
     liste.replaceChildren(...KURULUM.map(([a, b, c], i) => h('li', { class: hazir || i < idx ? 'bitti' : i === idx ? 'aktif' : '' }, h('b', {}, b), h('span', {}, c))));
-    const yildiz = hazir ? 21 : Math.min(21, Math.round((Math.max(idx + 1, 0) / KURULUM.length) * 21));
-    gok.replaceChildren(takimyildiz({ sen: 0, rota: yildiz, toplam: 21, w: 640, h: 400 }));
+    const n = Math.min(Math.max(v?.profil?.sure || 21, 7), 30);           // çok uzun planlarda çizim okunur kalsın
+    const yildiz = hazir ? n : Math.min(n, Math.round((Math.max(idx + 1, 0) / KURULUM.length) * n));
+    gok.replaceChildren(takimyildiz({ sen: 0, rota: yildiz, toplam: n, w: 640, h: 400 }));
     akis.replaceChildren(...S.olaylar.slice(-6).map((o, i, a) => balon(o, i === a.length - 1)), ...(hazir ? [] : [yaziyor()]));
     akis.scrollTop = akis.scrollHeight;
     durum.textContent = hazir ? 'Hazır. Gökyüzün çizildi.' : sonAjan ? `${sonAjan} çalışıyor…` : 'Ekip toplanıyor…';
-    if (hazir && !gecti) { gecti = true; setTimeout(S.demo ? uygulama : tanitim, S.demo ? 600 : 1500); }
+    if (hazir && !gecti) {
+      gecti = true;
+      setTimeout(() => { if (S.ekran === 'kurulum') (S.demo ? uygulama : tanitim)(); }, S.demo ? 600 : 1500);   // bu arada başka ekrana geçildiyse dokunma
+    }
   };
   clearInterval(S.zamanlayici);
   const dongu = async () => { if (S.ekran !== 'kurulum') return; await tazele(); if (S.ekran === 'kurulum') ciz(); if (!gecti) setTimeout(dongu, 700); };
@@ -355,6 +361,17 @@ const baslikSatiri = (b, alt, ...eylem) => h('div', { class: 'baslik-satiri' }, 
 const dugme = (t, f, sinif = '') => h('button', { class: `dugme ${sinif}`.trim(), onclick: f }, t);
 async function yap(f, basari) { if (S.mesgul) return; S.mesgul = true; try { const r = await f(); if (basari) bildir(basari); await tazele(); rozetler(); S.aktifPano?.guncelle(S.view); return r; } catch (e) { bildir(e.message); } finally { S.mesgul = false; } }
 
+/* İkizine öğret sekmesini belirli bir takımyıldız ve kavramla açar (sunucudaki öğretme durumu da ona geçer). */
+async function ogretAc(alanAdi, kavram = null) {
+  const i = Math.max(0, S.view.alanlar.findIndex((a) => a.alan === alanAdi));
+  const a = S.view.alanlar[i];
+  S.alan = i;
+  const k = kavram || a?.ikiz?.siradaki?.id || 'serbest';
+  S.ogretGorev = k;
+  try { S.view = await api(`/v2/sessions/${S.sid}/teach/select`, 'POST', { alan: a.alan, kavram: k }); } catch (e) { bildir(e.message); }
+  sekmeGit('ogret');
+}
+
 /* ---------- Gökyüzü ---------- */
 function ikizOzeti(a, kompakt = false) {
   const ik = a.ikiz;
@@ -367,7 +384,7 @@ function ikizOzeti(a, kompakt = false) {
         : 'Henüz hiçbir şey bilmiyor. İlk kavramı ona sen öğreteceksin.')),
       h('b', { class: 'ikiz-yuzde' }, `%${ik.bilgi_yuzde}`)),
     h('div', { class: 'ikiz-gok' }, ikizGogu(ik.yildizlar.filter((y) => !y.id.startsWith('serbest-')), 760, 200)),
-    sira ? h('div', { class: 'sag-eylem' }, dugme(`Öğret: ${sira.baslik}`, async () => { S.ogretGorev = sira.id; try { S.view = await api(`/v2/sessions/${S.sid}/teach/select`, 'POST', { alan: a.alan, kavram: sira.id }); } catch { /* yoksay */ } sekmeGit('ogret'); }, 'kucuk')) : null);
+    sira ? h('div', { class: 'sag-eylem' }, dugme(`Öğret: ${sira.baslik}`, () => ogretAc(a.alan, sira.id), 'kucuk')) : null);
 }
 function takimyildizlarim(v, yenile) {
   return h('section', { class: 'takimlar', 'aria-label': 'Takımyıldızların' },
@@ -385,7 +402,7 @@ function gokyuzuPano() {
     const oneri = v.oneriler[0];
     el.replaceChildren(
       takimyildizlarim(v, () => guncelle(S.view)),
-      baslikSatiri(`${v.gun}. gün`, `Merhaba ${v.ad}. ${v.sure} günlük rotanın ${v.gun}. günündesin.`, dugme('Ekibe görev ver', () => { sekmeGit('ekip'); setTimeout(() => $('#komut-metin')?.focus(), 50); })),
+      baslikSatiri(il ? `${il.gun + 1}. gün` : `${v.gun}. gün`, il ? `Merhaba ${v.ad}. ${a.konu} için ${a.hedef.sure} günlük rotanın ${il.gun + 1}. günündesin.` : `Merhaba ${v.ad}.`, dugme('Ekibe görev ver', () => { sekmeGit('ekip'); setTimeout(() => $('#komut-metin')?.focus(), 50); })),
       il ? h('section', { class: 'gok-bolumu' },
         h('div', {}, h('div', { class: 'takim' }, takimyildiz({ sen: il.sen_yildiz, rota: il.rota_yildiz, toplam: il.toplam_yildiz }), h('span', { class: 'koordinat' }, a.konu)),
           h('div', { class: 'lejant' }, h('span', {}, h('i', { class: 'nokta-altin' }), 'Senin yaktıkların'), h('span', {}, h('i', { class: 'nokta-rota' }), 'Rota: planı aksatmasaydın bugün burada olurdun'))),
@@ -396,7 +413,7 @@ function gokyuzuPano() {
           h('div', { class: 'rakam' }, h('span', {}, 'Parlaklık'), h('b', {}, `%${il.parlaklik}`)),
           h('div', { class: 'rakam' }, h('span', {}, 'Durum'), h('b', { style: 'font-size:22px' }, il.risk_tr)))) : h('p', { class: 'sis' }, 'Bu alanın gökyüzü hazırlanıyor…'),
       oneri ? h('div', { class: 'onay-seridi' }, h('div', {}, h('b', {}, `${oneri.kaynak} bir değişiklik öneriyor: `), oneri.baslik), dugme('İncele', () => sekmeGit('ekip'), 'kucuk')) : null,
-      v.koc ? h('div', { class: 'rehber' }, avatar('Rehber'), h('div', {}, h('p', {}, v.koc.message), v.koc.ask_user ? h('p', { class: 'sis', style: 'margin-top:6px' }, v.koc.ask_user) : null,
+      v.koc && (!v.koc.alan || v.koc.alan === a?.alan) ? h('div', { class: 'rehber' }, avatar('Rehber'), h('div', {}, h('p', {}, v.koc.message), v.koc.ask_user ? h('p', { class: 'sis', style: 'margin-top:6px' }, v.koc.ask_user) : null,
         h('button', { class: 'baglanti', style: 'margin-top:10px', onclick: () => sekmeGit('ekip') }, 'Ekibin ne yaptığını gör'))) : null,
       a?.ikiz ? ikizOzeti(a, true) : null,
       il ? h('section', { class: 'bolum' }, h('h3', {}, 'Rotana göre ilerlemen'), h('div', { class: 'grafik' }, egri(il.egri.sen, il.egri.rota),
@@ -628,16 +645,16 @@ function bugunPano() {
   let pratikAlan = null, pratikEl = null;
   const guncelle = (v) => {
     const bitti = v.bugun.filter((t) => t.done).length;
-    const hobi = v.alanlar.find((a) => a.alan.startsWith('hobi') && a.hazir);
+    const hobi = v.alanlar.find((a) => a.hazir && BECERI_KONULARI.test(a.konu));
     if (hobi && (pratikAlan !== hobi.alan || (pratikEl && (hobi.pratik || []).length !== pratikEl._sayi))) { pratikAlan = hobi.alan; pratikEl = pratikBolumu(hobi); pratikEl._sayi = (hobi.pratik || []).length; }
     const etiket = (alan) => v.alanlar.find((a) => a.alan === alan)?.konu || alan;
     el.replaceChildren(
       baslikSatiri('Bugün', `${bitti} / ${v.bugun.length} yıldız yandı.`),
       h('ul', { class: 'liste' }, v.bugun.map((t) => h('li', { class: 'gorev' + (t.done ? ' bitti' : '') },
-        h('button', { class: 'tik', role: 'checkbox', 'aria-checked': String(t.done), 'aria-label': `${t.title} tamamlandı`, onclick: () => (t.type === 'teach' ? (S.alan = Math.max(0, v.alanlar.findIndex((a) => a.alan === t.alan)), sekmeGit('ogret')) : yap(() => api(`/v2/sessions/${S.sid}/tasks/${t.id}/complete?yapildi=${!t.done}`, 'POST'))) },
+        h('button', { class: 'tik', role: 'checkbox', 'aria-checked': String(t.done), 'aria-label': `${t.title} tamamlandı`, onclick: () => (t.type === 'teach' ? ogretAc(t.alan, t.id) : yap(() => api(`/v2/sessions/${S.sid}/tasks/${t.id}/complete?yapildi=${!t.done}`, 'POST'))) },
           svg('svg', { viewBox: '0 0 24 24' }, svg('path', { d: 'M5 12l5 5 9-10' }))),
         h('div', {}, h('div', { class: 'bas' }, t.title), h('div', { class: 'meta' }, `${etiket(t.alan)} · ${{ learn: 'Öğren', practice: 'Uygula', reflect: 'Düşün', teach: 'İkizine anlat' }[t.type]} · ${t.minutes} dk`)),
-        t.type === 'teach' ? dugme('Anlat', () => { S.alan = Math.max(0, v.alanlar.findIndex((a) => a.alan === t.alan)); sekmeGit('ogret'); }, 'ince kucuk') : h('span')))),
+        t.type === 'teach' ? dugme('Anlat', () => ogretAc(t.alan, t.id), 'ince kucuk') : h('span')))),
       v.bugun.length ? null : h('p', { class: 'sis' }, 'Bugün için görev yok.'),
       v.son_tarihler.length ? h('section', { class: 'bolum' }, h('h3', {}, 'Yaklaşanlar'), h('div', { class: 'chip-satiri' }, v.son_tarihler.map((d) => h('span', { class: 'chip' }, `${d.baslik} · ${d.kalan_gun >= 0 ? d.kalan_gun + ' gün' : 'geçti'}`)))) : null,
       h('div', { class: 'gun-bitir' }, dugme('Günü bitir', () => yap(() => api(`/v2/sessions/${S.sid}/day/close`, 'POST'), 'Gün kapanıyor, ekip değerlendiriyor'), ''),
@@ -666,6 +683,7 @@ function konumlar() {
   });
   return k;
 }
+let sonBalon = '';
 function zihinHaritasi(v, aktif, sonMesaj, secili, onSec) {
   const k = konumlar();
   const kap = h('div', { class: 'zihin', role: 'group', 'aria-label': 'Ajan ekibi zihin haritası' });
@@ -696,7 +714,10 @@ function zihinHaritasi(v, aktif, sonMesaj, secili, onSec) {
       h('span', { class: 'ic' }, avatar(ad, aktif === ad), h('span', { class: 'dugum-ad' }, ad)), sayac[ad] ? h('span', { class: 'dugum-sayi' }, sayac[ad]) : null);
     kap.append(dugum);
     if (aktif === ad && sonMesaj) {
-      kap.append(h('div', { class: 'dugum-balon', style: `left:${(p.x / W) * 100}%;top:${(p.y / H) * 100}%;--c:${ajanRenk(ad)}` }, kisa(sonMesaj, 110)));
+      const yatay = p.x / W < 0.34 ? ' sol' : p.x / W > 0.66 ? ' sag' : '', dikey = p.y / H < 0.34 ? ' alt' : '';
+      const sabit = sonBalon === ad + sonMesaj ? ' sabit' : '';     // aynı mesaj her yenilemede yeniden belirmesin
+      sonBalon = ad + sonMesaj;
+      kap.append(h('div', { class: 'dugum-balon' + yatay + dikey + sabit, style: `left:${(p.x / W) * 100}%;top:${(p.y / H) * 100}%;--c:${ajanRenk(ad)}` }, kisa(sonMesaj, 110)));
     }
   });
   return h('div', {}, kap, h('div', { class: 'zihin-lejant' }, AKIS_ADI.map((a, i) => h('span', {}, h('i', { class: `akis-renk akis${i}` }), a)), h('span', { class: 'kucuk sis2' }, 'Bir ajana dokun: ürettiği çıktıyı gör')));
@@ -778,7 +799,7 @@ function ekipPano() {
     if (!cikti && !yukleniyor) ciktiGetir(secili);
     else if (S.olaylar.length !== ciktiSayi && S.olaylar.slice(ciktiSayi < 0 ? 0 : ciktiSayi).some((o) => o.ajan === secili)) { ciktiSayi = S.olaylar.length; ciktiGetir(secili); }
     if (ciktiSayi < 0) ciktiSayi = S.olaylar.length;
-    ajanSec.replaceChildren(h('option', { value: '' }, 'Otomatik'), ...v.sohbet_ajanlari.map((a) => h('option', { value: a }, a)));
+    if (!ajanSec.options.length) ajanSec.replaceChildren(h('option', { value: '' }, 'Otomatik'), ...v.sohbet_ajanlari.map((a) => h('option', { value: a }, a)));
     oneriKap.replaceChildren(...v.oneriler.map((p) => h('div', { class: 'oner-kart' },
       h('div', { style: 'display:flex;gap:10px;align-items:center' }, avatar(p.kaynak), h('b', {}, `${p.kaynak} onayını bekliyor`)), h('h3', { style: 'font-size:22px' }, p.baslik), h('p', {}, p.ozet),
       ...p.degisiklikler.map((d) => h('div', { class: 'fark-satir' }, `${d.etiket}: ${d.once} → `, h('b', {}, d.sonra))),
@@ -802,8 +823,13 @@ function ekipPano() {
 const YILDIZ_ADI = { sonuk: 'Bilmiyor', parlak: 'Kısmen biliyor', halkali: 'Tam biliyor' };
 function ikizPano() {
   const el = h('div', {});
+  const acik = new Set();          // açık "nasıl öğrendi?" bölümleri yeniden çizimde kapanmasın
+  let sonImza = '';
   const guncelle = (v) => {
     const a = aktifAlan(), ik = a?.ikiz; if (!ik) { el.replaceChildren(h('p', { class: 'sis' }, 'İkizin doğuyor…')); return; }
+    const imza = JSON.stringify([S.alan, ik, a.ikiz_kimlik, v.alanlar.map((x) => [x.alan, x.ikiz_kimlik, x.ikiz?.bilgi_yuzde])]);
+    if (imza === sonImza && el.childElementCount) return;    // değişen bir şey yoksa formlara ve açık bölümlere dokunma
+    sonImza = imza;
     el.replaceChildren(
       baslikSatiri('İkizlerin', 'Her konunun ilerlemesi farklı olduğu için her takımyıldızın kendi ikizi var. Her ikiz boş doğar ve yalnızca o konuda senin öğrettiklerini bilir; senden önde olamaz. İkizler yapay zekâ karakterleridir.'),
       ikizSecici(v, () => guncelle(S.view)),
@@ -818,10 +844,11 @@ function ikizPano() {
         h('ul', { class: 'liste' }, ik.yildizlar.map((y) => h('li', { class: 'gorev' + (y.acik ? '' : ' kilitli') },
           h('span', { class: `ikiz-nokta ${y.star}` }),
           h('div', {}, h('div', { class: 'bas' }, y.baslik), h('div', { class: 'meta' }, y.acik ? `${YILDIZ_ADI[y.star]}${y.total ? ` · son sınav ${y.score}/${y.total}` : ''}${y.deneme ? ` · ${y.deneme}. deneme` : ''}` : `${y.gun}. günde açılır`),
-            y.cumleler?.length ? h('details', { class: 'ikiz-detay' }, h('summary', {}, 'İkizin bu kavramı senden nasıl öğrendi?'),
+            y.cumleler?.length ? h('details', { class: 'ikiz-detay', open: acik.has(y.id) || undefined, ontoggle: (e) => (e.target.open ? acik.add(y.id) : acik.delete(y.id)) },
+              h('summary', {}, 'İkizin bu kavramı senden nasıl öğrendi?'),
               h('p', { class: 'kucuk sis2' }, 'Ona anlattıkların:'), h('ol', { class: 'cumleler kucuk-liste' }, y.cumleler.map((c) => h('li', {}, c))),
               y.sorular?.length ? h('div', {}, h('p', { class: 'kucuk sis2' }, 'Sınavda:'), h('ul', { class: 'soru-sonuc' }, y.sorular.map((q) => h('li', {}, h('span', { class: `karar ${q.sonuc}` }, { dogru: 'Doğru', eksik: 'Eksik', yanlis: 'Yanlış', anlatilmadi: 'Anlatılmadı' }[q.sonuc]), ' ', q.soru)))) : null) : null),
-          y.acik ? dugme(y.star === 'sonuk' ? 'Öğret' : 'Yeniden öğret', async () => { const k = y.id.startsWith('serbest-') ? 'serbest' : y.id; S.ogretGorev = k; try { S.view = await api(`/v2/sessions/${S.sid}/teach/select`, 'POST', { alan: a.alan, kavram: k }); } catch { /* yoksay */ } sekmeGit('ogret'); }, y.star === 'sonuk' ? 'kucuk' : 'ince kucuk') : h('span'))))),
+          y.acik ? dugme(y.star === 'sonuk' ? 'Öğret' : 'Yeniden öğret', () => ogretAc(a.alan, y.id.startsWith('serbest-') ? 'serbest' : y.id), y.star === 'sonuk' ? 'kucuk' : 'ince kucuk') : h('span'))))),
       h('div', { class: 'sag-eylem', style: 'margin-top:26px' }, dugme('Öğretme akışının canlı demosunu izle', () => canliDemo(), 'ince kucuk')));
   };
   return { el, guncelle };
@@ -915,7 +942,7 @@ function ogretPano() {
     uyari.hidden = true; S.aktifPano?.guncelle(S.view);
   };
   kavramSec.addEventListener('change', () => kavramDegis(aktifAlan().alan, kavramSec.value || 'serbest'));
-  let otoSecildi = false;
+  let secimSuruyor = false;
   const sinavBtn = dugme('İkizini sınava sok', async () => {
     sinavBtn.disabled = true; sinavBtn.textContent = 'İkiz sınavda…';
     await yap(async () => { const r = await api(`/v2/sessions/${S.sid}/teach/exam`, 'POST', { gorev_id: kavramSec.value || 'serbest' }); if (!r.ok) { uyari.textContent = r.mesaj; uyari.hidden = false; } });
@@ -948,7 +975,9 @@ function ogretPano() {
       ikizSecici(v, () => { const b = S.view.alanlar[S.alan]; kavramDegis(b.alan, b.ikiz?.siradaki?.id || 'serbest'); }));
     const acik = (a.ikiz?.yildizlar || []).filter((y) => y.acik && !y.id.startsWith('serbest-'));
     const secili = bu && og.kavram ? (og.kavram === 'serbest' ? '' : og.kavram) : (S.ogretGorev && acik.some((y) => y.id === S.ogretGorev) ? S.ogretGorev : (a.ikiz?.siradaki?.id || ''));
-    if (!otoSecildi && (!bu || og.kavram == null) && a.hazir) { otoSecildi = true; kavramDegis(a.alan, secili || 'serbest'); return; }
+    if ((!bu || og.kavram == null) && a.hazir && !secimSuruyor) {
+      secimSuruyor = true; kavramDegis(a.alan, secili || 'serbest').finally(() => { secimSuruyor = false; }); return;
+    }
     if (document.activeElement !== kavramSec) {
       kavramSec.replaceChildren(...acik.map((y) => h('option', { value: y.id, selected: y.id === secili }, `${y.gun}. gün · ${y.baslik}${y.star !== 'sonuk' ? ` (${YILDIZ_ADI[y.star].toLowerCase()})` : ''}`)),
         h('option', { value: 'serbest', selected: !secili }, 'Serbest anlatım (plan dışı)'));
@@ -1136,7 +1165,7 @@ function takimlarPano() {
       a.hazir ? h('div', { class: 'kart-ikiz-satir', style: `--ikiz:${a.ikiz_kimlik?.renk || '#8ea2ff'}` }, h('div', { class: 'kart-ikiz-kim' }, ikizAvatar(S.view, a, 64), h('b', {}, ikizAdi(a)), h('span', { class: 'kucuk sis' }, 'bu konunun ikizi')),
         h('div', { class: 'kart-ikiz' }, ikizGogu(a.ikiz.yildizlar.filter((y) => !y.id.startsWith('serbest-')), 520, 120, false))) : null,
       a.hazir ? h('p', { class: 'kucuk sis' }, `${a.ilerleme.sen_yildiz}/${a.ilerleme.toplam_yildiz} yıldız · ${a.ilerleme.fark > 0 ? `rotanın ${a.ilerleme.fark} yıldız gerisinde` : 'rotada'} · ikizine ${a.ikiz.ogretilen}/${a.ikiz.kavram_sayisi} kavram öğrettin`) : h('p', { class: 'kucuk sis' }, 'Ekip kuruyor…'),
-      a.hazir ? h('div', { class: 'sag-eylem' }, dugme('Gökyüzünde aç', () => { S.alan = i; sekmeGit('gokyuzu'); }, 'kucuk'), dugme('İkizine öğret', () => { S.alan = i; sekmeGit('ogret'); }, 'ince kucuk')) : null)),
+      a.hazir ? h('div', { class: 'sag-eylem' }, dugme('Gökyüzünde aç', () => { S.alan = i; sekmeGit('gokyuzu'); }, 'kucuk'), dugme('İkizine öğret', () => ogretAc(a.alan), 'ince kucuk')) : null)),
       form);
   };
   return { el, guncelle };
@@ -1180,7 +1209,8 @@ async function sonucBekle(kosul, sure = 15000) { const t0 = Date.now(); while (D
 async function canliDemo() {
   if (S.demoCalisiyor) return;
   S.demoCalisiyor = true; S.demoDur = false; S.demo = true;
-  const N = 9;
+  const N = 9, kendiSid = S.kullanici ? S.sid : null;
+  const geriDon = async () => { $('#demo-serit')?.remove(); if (!kendiSid) { location.reload(); return; } S.sid = kendiSid; S.olaylar = []; S.son = 0; S.view = null; S.panolar = {}; await devam(); };
   try {
     demoAnlat(1, N, 'Demo için Elif adında yeni bir öğrenci oluşturuyoruz: Veri Yapıları, 14 gün, günde 30 dakika. Ekip şimdi kuruluyor.');
     const r = await api('/v2/sessions', 'POST', { ad: 'Elif', akademik: 'Veri Yapıları', hobi: null, dakika: 30, zaman: 'aksam', seviye: 'baslangic', sure: 14, son_tarihler: [], misafir: true });
@@ -1224,9 +1254,11 @@ async function canliDemo() {
     const hakem = [...document.querySelectorAll('.dugum')].find((d) => d.textContent.includes('Hakem')); if (hakem) hakem.click();
     S.demoCalisiyor = false;
     demoAnlat(9, N, 'Ekip sayfasında her ajanın bu süreçte ne yaptığını görebilirsin. Hakem’in çıktısı açık: düzeltilecek cümle ve doğru kaynak orada. Demo bitti; artık kendin dene.',
-      dugme(S.kullanici ? 'Kendi gökyüzüme dön' : 'Kayıt ol ve başla', () => location.reload(), 'kucuk'));
+      dugme(kendiSid ? 'Kendi gökyüzüme dön' : 'Kayıt ol ve başla', geriDon, 'kucuk'));
   } catch (e) {
-    demoAnlat(0, N, e.message === 'durdu' ? 'Demo durduruldu.' : `Demo bir adımda durdu: ${e.message}`, dugme('Kapat', () => $('#demo-serit')?.remove(), 'ince kucuk'));
+    S.demoCalisiyor = false;
+    demoAnlat(0, N, e.message === 'durdu' ? 'Demo durduruldu.' : `Demo bir adımda durdu: ${e.message}`,
+      dugme(kendiSid ? 'Kendi gökyüzüme dön' : 'Ana sayfaya dön', geriDon, 'kucuk'));
   } finally { S.demoCalisiyor = false; S.demo = false; }
 }
 
