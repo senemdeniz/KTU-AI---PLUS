@@ -174,7 +174,7 @@ def _var(sid: str) -> dict:
 
 @app.get("/health")
 def health():
-    return {"ok": True, "surum": "2.0", "demo": ia.is_mock(), "saglayici": ia.provider(), "model": ia.model_name(), "yetenekler": ia.yetenekler()}
+    return {"ok": True, "surum": "2.0", "demo": ia.is_mock(), "saglayici": ia.provider(), "model": ia.model_name(), "modeller": ia.modeller(), "yetenekler": ia.yetenekler()}
 
 
 # ------------------------------------------------------------------ hesaplar
