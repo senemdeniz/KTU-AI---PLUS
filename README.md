@@ -48,9 +48,21 @@ cp .env.example .env
 
 | Sağlayıcı | Anahtar | `.env` |
 |---|---|---|
-| **Groq** (önerilen) | console.groq.com/keys | `LLM_BASE_URL=https://api.groq.com/openai/v1`<br>`LLM_MODEL=openai/gpt-oss-120b` |
-| Google Gemini | aistudio.google.com/apikey | `LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/`<br>`LLM_MODEL=` güncel “flash” modeli |
+| **Groq** (önerilen) | console.groq.com/keys | `.env.example`'daki satırlar hazır; yalnızca anahtarı yaz |
+| Google Gemini | aistudio.google.com/apikey | `.env.example`'daki Gemini satırlarını aç |
 | Anthropic Claude | console.anthropic.com | `ANTHROPIC_API_KEY=...` |
+
+**Hangi ajan hangi modeli kullanır?** Modeller bu projenin boyutuna göre seçildi ve bilgisayarında değil, Groq'un sunucusunda çalışır. Bilgisayarın (ör. bir MacBook Air) yalnızca uygulamayı çalıştırır.
+
+| Katman | Groq modeli | Ajanlar | Neden |
+|---|---|---|---|
+| Büyük | `openai/gpt-oss-120b` (`LLM_MODEL`) | Haritacı, Kutup Yıldızı, Yörüngeci, Kaşif, Hakem | Plan çizmek ve doğru değerlendirmek kalite ister; bu ajanlar seyrek çağrılır |
+| Hızlı | `openai/gpt-oss-20b` (`LLM_MODEL_HIZLI`) | Gözlemevi, Konu Bekçisi, Rehber, İkiz, Astronom, Kaynak Avcısı, sohbet | Kısa ve sık işler; hızlı cevap verir, dakikalık sınırı yormaz |
+| Görüntü | `qwen/qwen3.8-27b` (`LLM_VISION_MODEL`, önizleme) | Fotoğraftan öğretme | Groq'ta görüntü okuyan tek model |
+| Ses | `whisper-large-v3-turbo` (kendiliğinden) | Sesli anlatım | |
+| Yok | — | Gözcü | İlerleme ölçümü kuraldır |
+
+Groq'un ücretsiz katmanında bu iki metin modelinin her biri için sınır dakikada 30 istek ve 8 bin token. `LLM_MODEL_HIZLI` boş bırakılırsa bütün ajanlar `LLM_MODEL`'i kullanır.
 
 Ardından bağlantıyı dene ve sunucuyu başlat:
 
@@ -59,10 +71,10 @@ python3 llm_kontrol.py
 python3 -m uvicorn server:app --port 8000
 ```
 
-Sol alttaki rozet **“Demo modu”** yerine **“Canlı model: …”** gösterir.
+Sol alttaki rozet **“Demo modu”** yerine **“Canlı: gpt-oss-120b + gpt-oss-20b”** gösterir; Ekip sekmesindeki her ajan kartında o ajanın modeli yazar.
 
 - **`.env` GitHub'a gitmez** (`.gitignore`'da). Anahtarını koda, sohbete ya da ekran görüntüsüne koyma.
-- **Codespaces'te:** anahtarı **Settings → Secrets and variables → Codespaces** altına `LLM_API_KEY`, `LLM_BASE_URL` ve `LLM_MODEL` olarak ekle.
+- **Codespaces'te:** anahtarı **Settings → Secrets and variables → Codespaces** altına `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL` ve `LLM_MODEL_HIZLI` olarak ekle.
 - **Görüntü ve ses:**
   - Fotoğraftan öğretmek için `LLM_VISION_MODEL` değişkenine sağlayıcının görüntü modelini yaz.
   - Groq'ta sesli anlatım sunucudaki Whisper ile kendiliğinden açılır. Diğer sağlayıcılarda tarayıcının ses tanıması kullanılır.
@@ -78,7 +90,7 @@ Her ajanın tek bir işi vardır. Uygulamada **Ekip** sekmesinde her ajanın kar
 
 | Ajan | Ne işe yarar | Ne zaman çalışır | Tür |
 |---|---|---|---|
-| Gözlemevi | Ekibin yöneticisi: isteğini doğru ajana iletir, büyük kararları önce sana sorar | Her adımda | Yapay zekâ + kural |
+| **Gözlemevi** (ana ajan) | Görevini ve sorunu okur, hangi ajanın ne yapacağına modelle kendisi karar verir ve kararını gerekçesiyle söyler; büyük kararları önce sana sorar | Her görevde ve soruda | Yapay zekâ + kural |
 | Astronom | Konunu, seviyeni ve ayırabileceğin zamanı okuyup ekibe aktarır | Kayıtta, profil değişince | Yapay zekâ |
 | Kutup Yıldızı | Olası hedefleri puanlar; seçtiğin sürede ulaşabileceğin en anlamlı tekini seçer | Yeni konu açınca | Yapay zekâ |
 | Haritacı | Hedefi seçtiğin gün sayısına göre küçük günlük görevlere böler | Kurulumda, süre değişince | Yapay zekâ |
@@ -90,6 +102,11 @@ Her ajanın tek bir işi vardır. Uygulamada **Ekip** sekmesinde her ajanın kar
 | Kaşif | Sınav soruları ve doğru cevapları hazırlar, cevapları ikizden saklar | Sınavda | Yapay zekâ |
 | İkiz | Yalnızca senin cümlelerini bilir ve sınavda onlarla cevap verir | Öğrettiğinde | Yapay zekâ |
 | Hakem | Cevapları bağımsız puanlar, hatalı cümleni gösterir, kaynağın doğru bölümüne yönlendirir | Sınavdan sonra | Yapay zekâ + kural |
+
+**Ana ajan nasıl karar verir?** Gözlemevi ekibe verdiğin görevi okur.
+- **Seçim:** Dört işten (sınav planı, mini sınav, kaynak, planı hafifletme) uygun olanları ve hangi takımyıldızda yapılacağını seçer. Kararını akışa "Kararım: …" diye gerekçesiyle yazar.
+- **Sorular:** Sorulara hangi ajanın cevap vereceğine de o karar verir.
+- **Sınırlar:** Model yalnızca bu listeden seçebilir, yeni iş uyduramaz. Model cevap vermezse ya da bozuk cevap verirse anahtar kelime kurallarına döner ve bunu söyler.
 
 **Neden çok ajan?** Bilgi ayrımı için:
 
