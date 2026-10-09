@@ -19,7 +19,7 @@ from __future__ import annotations
 import json
 import os
 import random
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field, fields
 from typing import Literal
 
 MODEL = "claude-sonnet-5-5"
@@ -345,6 +345,11 @@ class LLMError(RuntimeError):
     """Model çağrısı başarısız oldu (ağ, kota, bozuk JSON). Üst katman demo içeriğine düşebilir."""
 
 
+# Model geçerli ama beklenmeyen biçimde JSON döndürebilir (eksik alan, yanlış tür). Ajanlar bunları da
+# "model yanıt vermedi" gibi ele alıp hazır içeriğe düşer; uygulama hiçbir zaman model yüzünden çökmez.
+HATALAR = (LLMError, KeyError, TypeError, ValueError, AttributeError, IndexError)
+
+
 def provider() -> str | None:
     """Hangi sağlayıcı kullanılacak?
     anthropic     : ANTHROPIC_API_KEY
@@ -558,13 +563,31 @@ def _mock(system: str, payload: dict) -> dict:
 # 5) AJAN ADIMLARI — arayüz bu fonksiyonları çağırır
 # ---------------------------------------------------------------------------
 
+def _sinif(cls, d: dict):
+    """Model çıktısından dataclass kurar: bilinmeyen alanları atar, eksik alan varsa LLMError verir."""
+    if not isinstance(d, dict):
+        raise LLMError(f"{cls.__name__} için nesne beklenirken {type(d).__name__} geldi")
+    bilinen = {f.name for f in fields(cls)}
+    try:
+        return cls(**{k: v for k, v in d.items() if k in bilinen})
+    except TypeError as e:
+        raise LLMError(f"{cls.__name__} eksik alan: {e}") from e
+
+
+def _liste(d: dict, anahtar: str) -> list:
+    v = d.get(anahtar) if isinstance(d, dict) else None
+    if not isinstance(v, list) or not v:
+        raise LLMError(f"'{anahtar}' listesi yok")
+    return v
+
+
 def extract_profile(name: str, cv_text: str, hobbies: list[str], goals: list[str], daily_minutes: int) -> Profile:
     out = llm_json(PROFILE_EXTRACTOR, {"name": name, "cv_text": cv_text, "hobbies": hobbies,
                                        "goals": goals, "daily_minutes": daily_minutes})
     out["name"] = name or out.get("name", "Kullanıcı")
     out["daily_minutes"] = daily_minutes
     out.setdefault("constraints", [])
-    return Profile(**out)
+    return _sinif(Profile, out)
 
 
 def is_mock() -> bool:
@@ -573,17 +596,24 @@ def is_mock() -> bool:
 
 def select_goal(profile: Profile) -> GoalDecision:
     out = llm_json(GOAL_SELECTOR, asdict(profile))
-    out["candidates"] = [GoalCandidate(**c) for c in out["candidates"]]
-    return GoalDecision(**out)
+    out["candidates"] = [_sinif(GoalCandidate, c) for c in _liste(out, "candidates")]
+    return _sinif(GoalDecision, out)
 
 
 def build_roadmap(profile: Profile, goal: GoalDecision) -> Roadmap:
     out = llm_json(ROADMAP_PLANNER, {"profile": asdict(profile), "goal": asdict(goal)}, max_tokens=6000)
-    return Roadmap(weeks=out["weeks"], tasks=[Task(**t) for t in out["tasks"]])
+    return Roadmap(weeks=_liste(out, "weeks"), tasks=[_sinif(Task, t) for t in _liste(out, "tasks")])
 
 
 def coach_feedback(state: TwinState) -> dict:
-    return llm_json(FEEDBACK_COACH, {"state": twin_snapshot(state), "recent_events": state.log[-5:]})
+    out = llm_json(FEEDBACK_COACH, {"state": twin_snapshot(state), "recent_events": state.log[-5:]})
+    if out.get("mode") not in ("momentum", "steady", "slipping", "at_risk") or not isinstance(out.get("message"), str):
+        raise LLMError("Rehber çıktısında mode/message yok")
+    eylem = out.get("action")
+    if not (isinstance(eylem, dict) and isinstance(eylem.get("title"), str)):
+        out["action"] = {"title": "Bugünün ilk görevini aç", "minutes": 5}
+    out.setdefault("ask_user", None)
+    return out
 
 
 def twin_talk(state: TwinState, roadmap: Roadmap, user_msg: str, mode: str = "chat") -> dict:
@@ -602,8 +632,8 @@ def maybe_replan(state: TwinState, roadmap: Roadmap, goal: GoalDecision, user_re
                                "recent_events": state.log[-7:], "remaining_tasks": remaining,
                                "user_reason": user_reason})
     if "updated_tasks" in out:
-        kept = [t for t in roadmap.tasks if t.day <= state.day]
-        roadmap.tasks = kept + [Task(**t) for t in out["updated_tasks"]]
+        yeni = [_sinif(Task, t) for t in _liste(out, "updated_tasks")]
+        roadmap.tasks = [t for t in roadmap.tasks if t.day <= state.day] + yeni
     return out
 
 

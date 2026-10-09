@@ -59,6 +59,6 @@ def denetle(konu: str, metin: str) -> dict:
     try:
         out = ia.llm_json(BEKCI, {"topic": konu, "text": metin}, max_tokens=300)
         return {"ilgili": bool(out.get("ilgili")) is True, "neden": str(out.get("neden", ""))[:240], "kaynak": "llm"}
-    except ia.LLMError:
+    except ia.HATALAR:
         return {"ilgili": False, "kaynak": "hata",
                 "neden": "Konu denetimi şu an yapılamadı; güvenlik için anlatımın ikize gönderilmedi. Biraz sonra yeniden dene."}

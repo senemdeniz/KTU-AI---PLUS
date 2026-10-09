@@ -1,30 +1,48 @@
-"""Gerçek model bağlantısını hızlıca doğrular.  Kullanım:  python3 llm_kontrol.py
-Önce HF_TOKEN (ve isteğe bağlı LLM_MODEL) ya da ANTHROPIC_API_KEY ortam değişkenini ver. Anahtar ekrana yazılmaz."""
+"""Dil modeli bağlantısını doğrular.  Kullanım:  python3 llm_kontrol.py
+
+Anahtarı .env dosyasından (bkz. .env.example) ya da ortam değişkeninden okur. Anahtar ekrana yazılmaz.
+"""
 import sys
 import time
 
-import ikiz_ajan as ia
+import ayar
 
-if ia.is_mock():
-    sys.exit("Model anahtarı bulunamadı (demo modu). Önce:  export HF_TOKEN=hf_...  (ya da ANTHROPIC_API_KEY) ve aynı terminalde tekrar çalıştır.")
+ayar.yukle()
 
-print(f"Sağlayıcı: {ia.provider()}  Model: {ia.model_name()}")
-SISTEM = ("Sen bir öğretmensin. Türkçe, kısa yanıt ver. Sadece şu JSON'u döndür: "
-          '{"cevap": str, "ornek": str}')
-t0 = time.time()
-try:
-    out = ia.llm_json(SISTEM, {"soru": "Türev nedir? Tek cümleyle açıkla ve bir örnek ver."}, max_tokens=300)
-except ia.LLMError as e:
-    m = str(e)
-    ipucu = ("Hesapta kredi yok ya da ödeme gerekiyor (Hugging Face ücretsiz hesapta aylık kredi yok: PRO ya da ödeme yöntemi ekle)." if "HTTP 402" in m else
-             "Token geçersiz ya da iptal edilmiş. Yeni token oluşturup tekrar export et." if "HTTP 401" in m else
-             "Token'da 'Make calls to Inference Providers' izni yok. Token ayarlarından bu izni aç ya da yeni token oluştur." if "HTTP 403" in m else
-             "Model bulunamadı ya da bu sağlayıcıda yok. LLM_MODEL değerini değiştir (örn. openai/gpt-oss-120b:cheapest)." if ("HTTP 404" in m or "HTTP 400" in m) else
-             "Çok fazla istek; biraz bekleyip tekrar dene." if "HTTP 429" in m else
-             "Sağlayıcı tarafında geçici hata; biraz sonra tekrar dene." if "HTTP 5" in m else
-             "SSL sertifika sorunu: macOS'ta 'pip3 install certifi' sonra tekrar dene; olmazsa çıktıyı gönder." if "CERTIFICATE" in m.upper() else
-             "İnternet bağlantını kontrol et." if "bağlantı hatası" in m else
-             "Model cevabı JSON değil; çıktıyı bana gönder.")
-    sys.exit(f"HATA: {m}\n→ {ipucu}")
-print(f"Başarılı ({time.time() - t0:.1f} sn). Model yanıtı:")
-print(out)
+import ikiz_ajan as ia  # noqa: E402  (.env okunduktan sonra)
+
+IPUCLARI = [
+    ("HTTP 401", "Anahtar geçersiz ya da iptal edilmiş. Sağlayıcının sitesinden yeni anahtar oluşturup .env dosyasına yaz."),
+    ("HTTP 402", "Hesapta kredi yok. Groq ya da Gemini'nin ücretsiz katmanını kullan (bkz. .env.example)."),
+    ("HTTP 403", "Anahtarın bu modele erişim izni yok. LLM_MODEL değerini ya da anahtar izinlerini kontrol et."),
+    ("HTTP 404", "Model adı bulunamadı. LLM_MODEL değerini sağlayıcının güncel model listesiyle karşılaştır."),
+    ("HTTP 400", "İstek reddedildi; çoğunlukla model adı ya da LLM_BASE_URL yanlıştır."),
+    ("HTTP 429", "Dakikalık sınıra takıldın; bir dakika bekleyip tekrar dene."),
+    ("HTTP 5", "Sağlayıcı tarafında geçici hata; biraz sonra tekrar dene."),
+    ("CERTIFICATE", "SSL sertifika sorunu. macOS'ta 'Install Certificates.command' dosyasını çalıştır ya da 'pip3 install certifi' dene."),
+    ("bağlantı hatası", "İnternet bağlantını ya da LLM_BASE_URL adresini kontrol et."),
+]
+
+
+def main() -> None:
+    if ia.is_mock():
+        sys.exit("Model anahtarı bulunamadı; uygulama demo modunda çalışır.\n"
+                 "→ cp .env.example .env  komutuyla dosyayı oluştur, LLM_API_KEY satırına anahtarını yaz ve tekrar çalıştır.")
+    print(f"Sağlayıcı: {ia.provider()}   Model: {ia.model_name()}")
+    t0 = time.time()
+    try:
+        out = ia.llm_json('Türkçe ve kısa yanıt ver. Sadece şu JSON\'u döndür: {"cevap": str}',
+                          {"soru": "Bağlı liste nedir? Tek cümleyle açıkla."}, max_tokens=300)
+    except ia.LLMError as e:
+        m = str(e)
+        ipucu = next((t for k, t in IPUCLARI if k.upper() in m.upper()), "Model cevabı beklenen biçimde değil; farklı bir model dene.")
+        sys.exit(f"HATA: {m}\n→ {ipucu}")
+    print(f"Metin: çalışıyor ({time.time() - t0:.1f} sn) → {out.get('cevap', out)}")
+    y = ia.yetenekler()
+    print(f"Fotoğraftan öğretme: {'açık (' + str(y['gorsel_model']) + ')' if y['gorsel'] else 'kapalı (LLM_VISION_MODEL tanımla)'}")
+    print(f"Sunucuda ses tanıma: {'açık (' + str(y['ses_model']) + ')' if y['ses'] else 'kapalı (tarayıcının ses tanıması kullanılır)'}")
+    print("Hazır. Şimdi sunucuyu başlat: python3 -m uvicorn server:app --port 8000")
+
+
+if __name__ == "__main__":
+    main()

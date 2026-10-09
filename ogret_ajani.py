@@ -389,7 +389,7 @@ def kasif_sinav(topic: str, task_title: str) -> list[ExamQuestion]:
     if ia.is_mock():
         return _demo_kavram_sinavi(task_title) or _demo_exam(topic)
     out = ia.llm_json(KASIF_SINAV, {"topic": topic, "task": task_title})
-    return [ExamQuestion(**q) for q in out["questions"]][:3]
+    return [ia._sinif(ExamQuestion, q) for q in ia._liste(out, "questions")][:3]
 
 
 def ikiz_sinav(exam: list[ExamQuestion], sentences: list[str]) -> list[TwinAnswer]:
@@ -399,7 +399,7 @@ def ikiz_sinav(exam: list[ExamQuestion], sentences: list[str]) -> list[TwinAnswe
         "anlatim": {str(i + 1): s for i, s in enumerate(sentences)},
         "sorular": [{"id": q.id, "question": q.question} for q in exam],   # referans İkiz'e verilmez
     })
-    answers = [TwinAnswer(**a) for a in out["answers"]]
+    answers = [ia._sinif(TwinAnswer, a) for a in ia._liste(out, "answers")]
     # Güvenlik kemeri: var olmayan cümleye atıf yapan ya da atıf yaptığı cümlelerle örtüşmeyen
     # (yani ikizin kendi bilgisini sızdırdığı) cevabı "anlatılmadı" say
     for a in answers:
@@ -417,7 +417,7 @@ def hakem(exam: list[ExamQuestion], sentences: list[str], answers: list[TwinAnsw
         "anlatim": {str(i + 1): s for i, s in enumerate(sentences)},
         "ikiz_cevaplari": [asdict(a) for a in answers],
     })
-    verdicts = [Verdict(**v) for v in out["verdicts"]]
+    verdicts = [ia._sinif(Verdict, v) for v in ia._liste(out, "verdicts")]
     # Atıfsız "doğru" olamaz: ikiz kendi bilgisini sızdırmış demektir
     by_id = {a.question_id: a for a in answers}
     q_by = {q.id: q for q in exam}
