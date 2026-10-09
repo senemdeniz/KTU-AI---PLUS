@@ -20,6 +20,8 @@ def _tip(konu: str) -> str:
         return "turev"
     if "gitar" in n:
         return "gitar"
+    if "veri yap" in n or "data struct" in n or "veri-yap" in n:
+        return "veri"
     return "genel"
 
 
@@ -27,10 +29,12 @@ def _tip(konu: str) -> str:
 _BASLANGIC = {
     "turev": {"limit ve süreklilik": 1.0, "türev kuralları": 0.8, "uygulamalar": 0.5},
     "gitar": {"akorlar": 0.5, "ritim": 0.5, "geçişler": 0.3},
+    "veri": {"karmaşıklık": 0.6, "doğrusal yapılar": 0.6, "ağaçlar ve graflar": 0.3},
 }
 _HEDEF_SEVIYE = {
     "turev": {"limit ve süreklilik": 2.0, "türev kuralları": 3.0, "uygulamalar": 2.5},
     "gitar": {"akorlar": 2.5, "ritim": 2.0, "geçişler": 2.5},
+    "veri": {"karmaşıklık": 2.5, "doğrusal yapılar": 3.0, "ağaçlar ve graflar": 2.5},
 }
 
 
@@ -71,6 +75,16 @@ def hedef(alan: str, konu: str, dakika: int) -> dict:
             "rationale": f"Günde {dakika} dakikayla en hızlı tatmin eden hedef bu: 21 gün sonunda çalıp paylaşabileceğin bir şarkın olur.",
             "target_skills": _HEDEF_SEVIYE["gitar"], "duration_days": 21,
             "success_metric": "Seçtiğin şarkıyı 3 dakika boyunca duraksamadan çalmak"}
+    if t == "veri":
+        return {"candidates": [
+            {"title": "Temel veri yapılarını seçip gerekçesiyle kullanabilmek (dizi, bağlı liste, yığın, kuyruk, hash, ağaç)", "fit_score": 90,
+             "reason": "Hem mülakat hem ders sınavları için çekirdek; sonraki algoritma konularının temeli."},
+            {"title": "Algoritma analizi ve sıralamada derinleşmek", "fit_score": 68, "reason": "Önce yapıları bilmek gerekir."},
+            {"title": "Yarışmalı programlama problemlerine başlamak", "fit_score": 48, "reason": "Temel oturmadan hayal kırıklığı yaratır."}],
+            "selected": "Temel veri yapılarını seçip gerekçesiyle kullanabilmek (dizi, bağlı liste, yığın, kuyruk, hash, ağaç)",
+            "rationale": f"Günde {dakika} dakikayla 21 günde en çok işe yarayan çekirdek: önce karmaşıklık, sonra doğrusal yapılar, hash, ağaçlar ve graflara giriş. Her yapıyı \"ne zaman seçerim?\" sorusuyla öğrenirsin.",
+            "target_skills": _HEDEF_SEVIYE["veri"], "duration_days": 21,
+            "success_metric": "Verilen 5 probleme uygun veri yapısını seçip nedenini anlatabilmek"}
     b = _genel_beceriler(konu)
     return {"candidates": [
         {"title": f"{konu} için 21 günlük temel sprint", "fit_score": 80, "reason": "Küçük adımlarla istikrar kurar."},
@@ -134,9 +148,36 @@ _GITAR = [
 _GITAR_ANLAT = {4: "G akoru", 8: "tırmalama kalıbı", 12: "akor geçişleri", 16: "şarkının yapısı", 20: "ritim ve tempo"}
 
 
+_VERI = [
+    ("learn", "karmaşıklık", "Big-O nedir? O(1), O(n), O(n²) farkını üç küçük koddan çıkar"),
+    ("learn", "doğrusal yapılar", "Dizi (array): indeksle erişim neden O(1)? Ekleme ve silme maliyeti"),
+    ("practice", "doğrusal yapılar", "Dizi problemleri: ters çevir, en büyük elemanı bul, iki işaretçi (5 soru)"),
+    ("learn", "doğrusal yapılar", "Bağlı liste: düğüm ve işaretçi mantığı; diziyle karşılaştır"),
+    ("practice", "doğrusal yapılar", "Bağlı listede ekleme, silme ve ters çevirme: kendi kodunu yaz"),
+    ("learn", "doğrusal yapılar", "Yığın (stack): LIFO; parantez eşleştirme örneği"),
+    ("reflect", "karmaşıklık", "1. hafta: dizi mi bağlı liste mi? Hangisini ne zaman seçersin? 3 cümle yaz"),
+    ("learn", "doğrusal yapılar", "Kuyruk (queue) ve deque: FIFO; liste yerine deque neden?"),
+    ("practice", "doğrusal yapılar", "Yığın ve kuyrukla 5 soru (geçerli parantez, kuyruktan yığın yap)"),
+    ("learn", "doğrusal yapılar", "Hash tablosu: hash fonksiyonu, çakışma, ortalama O(1) arama"),
+    ("practice", "doğrusal yapılar", "Sözlük ve küme ile 6 soru (frekans sayma, tekrar bulma, iki toplam)"),
+    ("learn", "ağaçlar ve graflar", "Ağaç terimleri: kök, yaprak, derinlik, yükseklik; ikili ağaç"),
+    ("practice", "ağaçlar ve graflar", "İkili ağaçta gezinti: inorder, preorder, postorder (özyinelemeyle)"),
+    ("reflect", "doğrusal yapılar", "2. hafta: hash tablosunu bir arkadaşına nasıl anlatırdın? Yaz"),
+    ("learn", "ağaçlar ve graflar", "İkili arama ağacı (BST): arama, ekleme; dengesizlik sorunu"),
+    ("practice", "ağaçlar ve graflar", "BST problemleri: doğrula, en küçük ortak ata (4 soru)"),
+    ("learn", "ağaçlar ve graflar", "Yığın (heap) ve öncelik kuyruğu: en küçük eleman O(log n)"),
+    ("learn", "ağaçlar ve graflar", "Graflara giriş: komşuluk listesi; BFS ve DFS fikri"),
+    ("practice", "ağaçlar ve graflar", "BFS ve DFS ile küçük bir labirent ya da ada sayma problemi"),
+    ("practice", "karmaşıklık", "Karışık 6 problem: her birinde veri yapısını seç ve nedenini yaz"),
+    ("reflect", "karmaşıklık", "Final değerlendirme: tablo çiz: yapı, erişim, arama, ekleme maliyetleri"),
+]
+_VERI_ANLAT = {4: "bağlı liste", 8: "yığın ve kuyruk", 12: "hash tablosu", 16: "ikili arama ağacı", 20: "BFS ve DFS"}
+
+
 def yol(alan: str, konu: str, dakika: int) -> dict:
     t = _tip(konu)
-    banka, anlat = (_TUREV, _TUREV_ANLAT) if t == "turev" else (_GITAR, _GITAR_ANLAT) if t == "gitar" else (None, None)
+    banka, anlat = ((_TUREV, _TUREV_ANLAT) if t == "turev" else (_GITAR, _GITAR_ANLAT) if t == "gitar"
+                    else (_VERI, _VERI_ANLAT) if t == "veri" else (None, None))
     gun_dk = 25 if alan == "akademik" else 15
     gun_dk = min(gun_dk, max(10, dakika))
     if banka is None:
