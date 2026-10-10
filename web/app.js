@@ -74,7 +74,7 @@ async function tazele() {
     return false;
   }
 }
-const SVG_YILDIZ = () => svg('svg', { viewBox: '0 0 24 24', width: 22, height: 22, 'aria-hidden': 'true' }, svg('path', { d: 'M12 2C13 9 15 11 22 12C15 13 13 15 12 22C11 15 9 13 2 12C9 11 11 9 12 2Z', fill: '#f5d78e' }));
+const SVG_YILDIZ = () => svg('svg', { viewBox: '0 0 40 20', width: 40, height: 20, 'aria-hidden': 'true' }, svg('path', { d: 'M10,0.5 Q11.7,8.3 19.5,10 Q11.7,11.7 10,19.5 Q8.3,11.7 0.5,10 Q8.3,8.3 10,0.5Z', fill: '#f5d78e' }), svg('path', { d: 'M30,1.5 Q31.6,8.4 38.5,10 Q31.6,11.6 30,18.5 Q28.4,11.6 21.5,10 Q28.4,8.4 30,1.5Z', fill: 'none', stroke: '#8ea2ff', 'stroke-width': 2.2, 'stroke-linejoin': 'round' }));
 const marka = () => h('span', { class: 'marka' }, SVG_YILDIZ(), 'İkiz');
 const logoDugmesi = () => h('button', { class: 'marka logo-dugme', 'aria-label': 'İkiz: tüm takımyıldızların', title: 'Tüm takımyıldızların', onclick: () => sekmeGit('takimlar') }, SVG_YILDIZ(), 'İkiz');
 

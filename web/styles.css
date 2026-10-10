@@ -34,7 +34,7 @@ button,input,textarea,select{font:inherit;color:inherit}
 /* ortak yerleşim */
 .sayfa{max-width:1120px;margin:0 auto;padding:max(24px,env(safe-area-inset-top)) clamp(20px,5vw,48px) 64px}
 .marka{display:inline-flex;align-items:center;gap:10px;font-family:var(--baslik);font-weight:800;font-size:20px;letter-spacing:-.02em}
-.marka svg{width:22px;height:22px}
+.marka svg{width:40px;height:20px}
 .ust{display:flex;align-items:center;justify-content:space-between;padding:20px 0}
 .rozet{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--sis);border:1px solid var(--cizgi);border-radius:999px;padding:6px 12px;background:rgba(13,20,48,.6)}
 .rozet i{width:8px;height:8px;border-radius:50%;background:var(--altin);display:block}
