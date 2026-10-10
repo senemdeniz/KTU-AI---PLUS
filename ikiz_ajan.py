@@ -988,7 +988,7 @@ def gorsel_json(system: str, metin: str, veri_b64: str, mime: str, max_tokens: i
         raise LLMError("görüntü modelinin cevabı beklenen biçimde değil") from e
 
 
-def ses_yaziya(ses: bytes, mime: str, dil: str = "tr") -> str:
+def ses_yaziya(ses: bytes, mime: str, dil: str = "tr", ipucu: str = "") -> str:
     """Ses kaydını yazıya döker (OpenAI uyumlu /audio/transcriptions, çok parçalı form)."""
     import uuid as _uuid
     y = yetenekler()
@@ -998,7 +998,8 @@ def ses_yaziya(ses: bytes, mime: str, dil: str = "tr") -> str:
     uzanti = {"audio/webm": "webm", "audio/ogg": "ogg", "audio/mp4": "m4a", "audio/mpeg": "mp3", "audio/wav": "wav", "audio/x-wav": "wav"}.get(tur, "webm")
     sinir = "----ikiz" + _uuid.uuid4().hex
     parcalar = [f'--{sinir}\r\nContent-Disposition: form-data; name="{ad}"\r\n\r\n{deger}\r\n'.encode()
-                for ad, deger in (("model", y["ses_model"]), ("language", dil), ("response_format", "json"))]
+                for ad, deger in (("model", y["ses_model"]), ("language", dil), ("response_format", "json"))
+                + ((("prompt", ipucu.replace("\r", " ").replace("\n", " ")[:200]),) if ipucu.strip() else ())]
     parcalar.append(f'--{sinir}\r\nContent-Disposition: form-data; name="file"; filename="kayit.{uzanti}"\r\nContent-Type: {tur}\r\n\r\n'.encode()
                     + ses + b"\r\n")
     parcalar.append(f"--{sinir}--\r\n".encode())

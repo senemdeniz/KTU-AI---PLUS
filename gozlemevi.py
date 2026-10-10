@@ -1636,7 +1636,8 @@ def sesten_metin(sid: str, ses: bytes, mime: str) -> dict:
         if _cok_kipli_sinir(s, "ses_zaman", 30):
             return {"ok": False, "mesaj": "Bu saat için ses hakkın doldu."}
     try:
-        metin = ia.ses_yaziya(ses, mime)
+        # Konu adı Whisper'a ipucu olarak verilir: teknik terimler ("bağlı liste", "işaretçi") daha doğru yazılır
+        metin = ia.ses_yaziya(ses, mime, ipucu=f"{s['ogret'].get('konu', '')} konusunu anlatan Türkçe bir öğrenci.")
     except ia.HATALAR as e:
         return {"ok": False, "mesaj": f"Ses yazıya çevrilemedi: {e}"}
     return {"ok": True, "metin": metin[:1500]}

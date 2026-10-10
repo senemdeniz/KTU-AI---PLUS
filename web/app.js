@@ -886,34 +886,48 @@ function ogretPano() {
   const uyari = h('div', { class: 'hata-kutu', role: 'alert', hidden: true });
   const gecici = h('p', { class: 'gecici', 'aria-live': 'polite' });
   const cumleKap = h('div', {}), sonucKap = h('div', { 'aria-live': 'polite' }), baslikKap = h('div', {}), ipucuKap = h('div', {});
-  let durdur = null, dinliyor = false;
-  const sesBtn = SesTanima ? h('button', { type: 'button', class: 'dugme ince ses-dugme', onclick: () => {
+  // Sesle anlat: Groq bağlıysa ses her zaman sunucudaki Whisper modeline gider (tarayıcıdan bağımsız, Safari dahil).
+  // Model yoksa tarayıcının kendi ses tanıması denenir.
+  let durdur = null, dinliyor = false, kaydedici = null, sayac = null;
+  const SES_SINIR = 90;
+  const sesBtn = h('button', { type: 'button', class: 'dugme ince ses-dugme', onclick: () => (S.yetenek?.ses || !SesTanima ? sunucuSes() : tarayiciSes()) }, h('i', { class: 'kayit' }), 'Sesle anlat');
+  const sesEtiket = (t, aktif = false) => { sesBtn.classList.toggle('dinliyor', aktif); sesBtn.replaceChildren(h('i', { class: 'kayit' }), t); };
+  const sesHata = (m) => { uyari.textContent = m; uyari.hidden = false; };
+  const tarayiciSes = () => {
     if (dinliyor) { durdur?.(); return; }
-    dinliyor = true; uyari.hidden = true; sesBtn.classList.add('dinliyor'); sesBtn.replaceChildren(h('i', { class: 'kayit' }), 'Dinliyorum… durdurmak için dokun');
+    dinliyor = true; uyari.hidden = true; sesEtiket('Dinliyorum… durdurmak için dokun', true);
     durdur = sesBaslat((kesin, g) => { if (kesin) metin.value = (metin.value ? metin.value + ' ' : '') + kesin.trim(); gecici.textContent = g; },
-      (hata) => { dinliyor = false; sesBtn.classList.remove('dinliyor'); sesBtn.replaceChildren(h('i', { class: 'kayit' }), 'Sesle anlat'); gecici.textContent = ''; if (hata) { uyari.textContent = hata; uyari.hidden = false; } });
-  } }, h('i', { class: 'kayit' }), 'Sesle anlat') : h('button', { type: 'button', class: 'dugme ince ses-dugme', onclick: () => sunucuSes() }, h('i', { class: 'kayit' }), 'Sesle anlat');
-  // Tarayıcı ses tanıması yoksa: kaydı sunucudaki ses modeline (Whisper) gönder
-  let kaydedici = null;
+      (hata) => { dinliyor = false; sesEtiket('Sesle anlat'); gecici.textContent = '';
+        if (hata) sesHata(/service-not-allowed|network|language-not-supported/.test(hata)
+          ? 'Bu tarayıcının ses tanıma servisi kapalı. Sunucuda ses modeli için .env dosyasına Groq anahtarını ekle ya da Chrome kullan.' : hata); });
+  };
   const sunucuSes = async () => {
-    if (!S.yetenek?.ses) { uyari.textContent = 'Bu tarayıcıda sesli anlatım yok ve sunucuda ses modeli yapılandırılmadı. Chrome ya da Safari kullan.'; uyari.hidden = false; return; }
     if (kaydedici) { kaydedici.stop(); return; }
+    if (!S.yetenek?.ses) { sesHata('Sesle anlatım için Groq anahtarı gerekiyor (sunucudaki Whisper modeli). .env dosyasına LLM_API_KEY ekleyip sunucuyu yeniden başlat.'); return; }
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') { sesHata('Bu tarayıcı ses kaydını desteklemiyor.'); return; }
     let akis;
-    try { akis = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch { uyari.textContent = 'Mikrofon izni verilmedi.'; uyari.hidden = false; return; }
-    const parca = []; kaydedici = new MediaRecorder(akis);
-    kaydedici.ondataavailable = (e) => parca.push(e.data);
+    try { akis = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch { sesHata('Mikrofon izni verilmedi. Adres çubuğundan mikrofona izin ver.'); return; }
+    uyari.hidden = true;
+    const tur = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'].find((t) => MediaRecorder.isTypeSupported?.(t));
+    const parca = []; kaydedici = tur ? new MediaRecorder(akis, { mimeType: tur }) : new MediaRecorder(akis);
+    kaydedici.ondataavailable = (e) => { if (e.data.size) parca.push(e.data); };
     kaydedici.onstop = async () => {
-      akis.getTracks().forEach((x) => x.stop());
-      const b = new Blob(parca, { type: kaydedici.mimeType || 'audio/webm' }); kaydedici = null;
-      sesBtn.classList.remove('dinliyor'); sesBtn.replaceChildren(h('i', { class: 'kayit' }), 'Yazıya çevriliyor…');
+      clearInterval(sayac); akis.getTracks().forEach((x) => x.stop());
+      const b = new Blob(parca, { type: (kaydedici.mimeType || tur || 'audio/webm') }); kaydedici = null;
+      if (b.size < 1000) { sesEtiket('Sesle anlat'); sesHata('Kayıt çok kısa; biraz daha konuş.'); return; }
+      sesEtiket('Yazıya çevriliyor…'); sesBtn.disabled = true;
       try {
         const veri = await new Promise((ok) => { const fr = new FileReader(); fr.onload = () => ok(String(fr.result).split(',')[1]); fr.readAsDataURL(b); });
         const r = await api(`/v2/sessions/${S.sid}/teach/audio`, 'POST', { mime: b.type.split(';')[0] || 'audio/webm', veri });
-        metin.value = (metin.value ? metin.value + ' ' : '') + r.metin; bildir('Sesin yazıya çevrildi; kontrol edip ekle');
-      } catch (e) { uyari.textContent = e.message; uyari.hidden = false; }
-      sesBtn.replaceChildren(h('i', { class: 'kayit' }), 'Sesle anlat');
+        if (r.metin) { metin.value = (metin.value ? metin.value + ' ' : '') + r.metin; metin.focus(); bildir('Sesin yazıya çevrildi; kontrol edip “İkizine anlat”a bas'); }
+        else sesHata('Kayıtta konuşma duyulmadı; tekrar dene.');
+      } catch (e) { sesHata(e.message); }
+      sesBtn.disabled = false; sesEtiket('Sesle anlat');
     };
-    kaydedici.start(); sesBtn.classList.add('dinliyor'); sesBtn.replaceChildren(h('i', { class: 'kayit' }), 'Kaydediyorum… bitirmek için dokun');
+    kaydedici.start(1000);
+    const t0 = Date.now();
+    const yaz = () => { const sn = Math.floor((Date.now() - t0) / 1000); sesEtiket(`Kaydediyorum ${sn} sn · bitirmek için dokun`, true); if (sn >= SES_SINIR) kaydedici?.stop(); };
+    yaz(); sayac = setInterval(yaz, 500);
   };
   // Fotoğraftan anlat: görüntü tarayıcıda küçültülüp yeniden kodlanır (EXIF/konum bilgisi silinir), sonra görüntü destekli modele gider
   const dosya = h('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp', hidden: true, 'aria-label': 'Fotoğraf seç' });
