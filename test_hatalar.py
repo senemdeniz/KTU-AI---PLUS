@@ -390,3 +390,21 @@ def test_anlat_basligi_kavrama_indirgenir(ham, kavram):
 def test_kardes_kelimesi_ikiz_olur():
     assert ia.gorev_basligi_duzelt("Kardeşine öğrendiğin yapıyı göster", "practice") == "İkizine öğrendiğin yapıyı göster"
     assert "kardeş" not in ia.plan_dogrula([{"day": 2, "title": "Kardeşine kuyruğu anlat", "type": "teach"}], 1, 9, 1)[0]["title"].lower()
+
+
+# ---------------------------------------------------------------- Kaşif: sorular kullanıcının cümlelerine dayanır
+def test_kasif_sorulari_anlatima_dayanir_ve_hatali_soru_korunur(monkeypatch):
+    gelen = []
+    def sahte(system, payload, **k):
+        gelen.append(payload)
+        return {"questions": [{"id": "x", "question": "Bağlı listede 5. elemana nasıl ulaşılır?", "reference": "Baştan düğüm düğüm gezilir.",
+                               "key_points": ["baştan", "düğüm"], "hedef": [2, 9]}]}
+    monkeypatch.setattr(ia, "is_mock", lambda: False)
+    monkeypatch.setattr(ia, "llm_json", sahte)
+    cumleler = ["Her düğüm sonrakini işaret eder.", "Elemana indeksle doğrudan ulaşılır."]
+    onceki = [{"question": "Başa ekleme neden hızlıdır?", "reference": "Kaydırma yok.", "key_points": ["kaydırma"], "hedef": [1], "result": "yanlis"},
+              {"question": "Doğru çıkan soru", "reference": "-", "key_points": [], "hedef": [], "result": "dogru"}]
+    sorular = oa.kasif_sinav("Veri Yapıları", "bağlı liste", cumleler, onceki)
+    assert gelen[0]["anlatim"] == {"1": cumleler[0], "2": cumleler[1]}           # Kaşif cümleleri görür
+    assert [q.question for q in sorular] == ["Başa ekleme neden hızlıdır?", "Bağlı listede 5. elemana nasıl ulaşılır?"]
+    assert [q.id for q in sorular] == ["q1", "q2"] and sorular[1].hedef == [2]    # geçersiz cümle numarası atılır

@@ -1043,7 +1043,7 @@ function ogretPano() {
         gb.duzelt_metin?.length ? h('div', { class: 'duzelt-liste' }, h('span', { class: 'kucuk sis2' }, 'Düzeltmen gereken cümleler'),
           gb.duzelt_metin.map((d) => h('div', { class: 'duzelt-satir' }, h('b', {}, `${ROMEN[d.no - 1] || d.no}.`), h('span', {}, d.cumle), dugme('Düzelt', () => duzelt(d.no), 'ince kucuk')))) : null,
         gb.yonlendirme?.length ? h('div', {}, h('span', { class: 'kucuk sis2' }, 'Doğru yer'), h('div', { class: 'yon-linkler' }, gb.yonlendirme.map((y) => h('a', { class: 'dugme kucuk', href: guvenliUrl(y.url), target: '_blank', rel: 'noopener noreferrer' }, y.baslik)))) : null) : null,
-      ...son.items.map((m, i) => h('div', { class: 'sinav-madde' }, h('span', { class: 'kucuk sis2' }, `Soru ${i + 1}`), h('b', {}, m.question),
+      ...son.items.map((m, i) => h('div', { class: 'sinav-madde' }, h('span', { class: 'kucuk sis2' }, `Soru ${i + 1}${m.hedef?.length ? ` · sınadığı cümlen: ${m.hedef.map((c) => ROMEN[c - 1] || c).join(', ')}` : ''}`), h('b', {}, m.question),
         h('span', { class: 'kucuk sis2' }, `İkiz (yapay zekâ) yanıtı${m.cited?.length ? ` · dayandığı cümle: ${m.cited.map((c) => ROMEN[c - 1] || c).join(', ')}` : ''}`), h('p', {}, m.twin_answer),
         h('span', { class: `karar ${m.result}` }, { dogru: 'Doğru', eksik: 'Eksik', yanlis: 'Yanlış', anlatilmadi: 'Anlatılmadı' }[m.result]),
         m.hint ? h('div', { style: 'display:flex;gap:10px;align-items:flex-start' }, avatar('Hakem'), h('p', { class: 'sis' }, m.hint)) : null))]

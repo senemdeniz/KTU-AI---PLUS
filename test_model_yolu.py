@@ -38,6 +38,10 @@ def _akilli(system: str, payload: dict) -> dict:
         if system == istem:
             SAYAC[ajan] += 1
             return ia._mock(istem, payload)
+    if system == oa.KASIF_ANLATIM:                           # sorular kullanıcının cümlelerine dayanır
+        SAYAC["Kaşif"] += 1
+        assert payload["anlatim"], "Kaşif kullanıcının cümlelerini almalı"
+        return {"questions": [{**asdict(q), "hedef": [1]} for q in (oa._demo_kavram_sinavi(payload["kavram"]) or oa._demo_exam(payload["topic"]))]}
     if system == oa.KASIF_SINAV:
         SAYAC["Kaşif"] += 1
         return {"questions": [asdict(q) for q in (oa._demo_kavram_sinavi(payload["task"]) or oa._demo_exam(payload["topic"]))]}
