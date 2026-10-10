@@ -378,3 +378,15 @@ def test_groq_anahtari_tek_basina_yeter(monkeypatch):
     monkeypatch.setenv("LLM_API_KEY", "gsk_ornek")
     assert ia._taban() == "https://api.groq.com/openai/v1"
     assert ia.model_name("Haritacı") == "openai/gpt-oss-120b" and ia.model_name("Rehber") == "openai/gpt-oss-20b"
+
+
+# ---------------------------------------------------------------- model başlıkları: "kardeş" değil "ikiz"
+@pytest.mark.parametrize("ham,kavram", [("Kardeşine (ikizine) kuyruk yapısını anlat", "kuyruk yapısını"),
+                                        ("İkizine yığın kavramını anlat.", "yığın kavramını"), ("Anlat: bağlı liste", "bağlı liste")])
+def test_anlat_basligi_kavrama_indirgenir(ham, kavram):
+    assert ia.kavram_adi(ham) == kavram and ia.gorev_basligi_duzelt(ham, "teach") == f"Anlat: {kavram}"
+
+
+def test_kardes_kelimesi_ikiz_olur():
+    assert ia.gorev_basligi_duzelt("Kardeşine öğrendiğin yapıyı göster", "practice") == "İkizine öğrendiğin yapıyı göster"
+    assert "kardeş" not in ia.plan_dogrula([{"day": 2, "title": "Kardeşine kuyruğu anlat", "type": "teach"}], 1, 9, 1)[0]["title"].lower()

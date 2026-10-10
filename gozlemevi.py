@@ -869,7 +869,7 @@ def _anlat_gorevleri(tr: dict) -> list[dict]:
 
 
 def _anlat_basligi(x: dict) -> str:
-    return x["title"].split("Anlat:", 1)[-1].strip() or x["title"]
+    return ia.kavram_adi(x["title"])
 
 
 def _ogretilecek_gorev(s: dict, alan: str, gorev_id: str | None) -> dict | None:
