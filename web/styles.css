@@ -589,3 +589,11 @@ button.ajan-kart:hover,button.ajan-kart:focus-visible{border-color:color-mix(in 
 .sonuc-bos{border:1px dashed var(--cizgi2);border-radius:var(--r-orta);padding:22px;display:grid;gap:6px}
 .sil-hepsi{color:var(--sis2)!important;font-size:13px;font-weight:500}
 .konus>.oner-kart,.konus>.yanit-kutu{margin-bottom:0}
+
+/* Hakem: hataya özel yönlendirme ve düzeltme rehberi */
+.duzelt-kart{display:grid;gap:8px;padding:12px 14px;border:1px solid rgba(255,156,138,.3);border-radius:var(--r-kucuk);background:rgba(7,11,28,.4)}
+.duzelt-kart p{margin:0}
+.kaynak-git{justify-self:start;text-decoration:none;color:var(--gece)!important}
+.duzelt-rehber{display:grid;gap:10px;padding:14px 16px;border:1px solid rgba(245,215,142,.55);border-radius:var(--r-orta);background:rgba(245,215,142,.07)}
+.duzelt-rehber p{margin:0}
+.rehber-bas{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center}

@@ -17,12 +17,14 @@ import ayar
 ayar.yukle()
 
 import ikiz_ajan as ia  # noqa: E402
+import kaynak_avcisi as ka  # noqa: E402
 import ogret_ajani as oa  # noqa: E402
 
 KONU, KAVRAM = "Veri Yapıları", "bağlı liste"
 DOGRU = "Bağlı listede her düğüm, verisiyle birlikte bir sonraki düğümün adresini tutar."
 HATALI = "Bağlı listede bir elemana indeksle doğrudan, tek adımda ulaşılır."
 DUZELTME = "Bağlı listede indeks yoktur; bir elemana ulaşmak için baştan başlayıp düğüm düğüm ilerlemek gerekir."
+KAYNAKLAR = ka.kavram_bolumu(KAVRAM)
 ETIKET = {"dogru": "DOĞRU", "eksik": "EKSİK", "yanlis": "YANLIŞ", "anlatilmadi": "ANLATILMADI"}
 
 
@@ -31,7 +33,7 @@ def tur(baslik: str, cumleler: list[str], oturum: str) -> oa.TeachResult:
     for i, c in enumerate(cumleler, 1):
         print(f"  {i}. {c}")
     t0 = time.time()
-    r = oa.ikize_ogret(KONU, KAVRAM, "\n".join(cumleler), oturum=oturum)
+    r = oa.ikize_ogret(KONU, KAVRAM, "\n".join(cumleler), oturum=oturum, kaynaklar=KAYNAKLAR)
     print(f"  ({time.time() - t0:.1f} sn)")
     if r.guvenlik.get("engel"):
         sys.exit(f"Anlatım güvenlik denetiminden geçmedi: {r.guvenlik}")
@@ -42,6 +44,9 @@ def tur(baslik: str, cumleler: list[str], oturum: str) -> oa.TeachResult:
         print(f"\n  Soru ({q.id}) · sınadığı cümle: {q.hedef or '—'}\n    {q.question}")
         print(f"    İkiz: {a.answer if a else '—'}  [dayandığı: {a.cited if a else '—'}]")
         print(f"    Hakem: {ETIKET.get(v.result, v.result) if v else '—'}" + (f" · ipucu: {v.hint}" if v and v.hint else ""))
+        if v and v.result != "dogru":
+            k = KAYNAKLAR[v.kaynak - 1]["baslik"] if v.kaynak else "—"
+            print(f"    Yönlendirme: {k} · neye bak: {v.neye_bak or '—'}")
     print(f"\n  Puan: {r.score}/{len(r.exam)} · yıldız: {r.star}")
     return r
 
@@ -61,6 +66,8 @@ def main() -> None:
     hedefli = sum(1 for q in r1.exam if q.hedef)
     hatali_sorular = [q for q in r1.exam if 2 in q.hedef]
     yakalandi = [q for q in hatali_sorular if v1.get(q.id) in ("yanlis", "eksik")]
+    vd1 = {v.question_id: v for v in r1.verdicts}
+    yonlendi = [q for q in yakalandi if vd1[q.id].kaynak and vd1[q.id].neye_bak]
     v2 = {v.question_id: v.result for v in r2.verdicts}
     q2 = {q.question.strip().lower(): q for q in r2.exam}
     korunan = [q2[q.question.strip().lower()] for q in yakalandi if q.question.strip().lower() in q2]
@@ -71,6 +78,7 @@ def main() -> None:
         ("Kaşif'in soruları anlatılan cümlelere dayanıyor", hedefli == len(r1.exam) and len(r1.exam) > 0, f"{hedefli}/{len(r1.exam)} soru bir cümleyi sınıyor"),
         ("Hatalı cümleyi sınayan soru var", bool(hatali_sorular), f"{len(hatali_sorular)} soru"),
         ("Hakem hatalı cümleyi yakaladı", bool(yakalandi), f"{len(yakalandi)} soru yanlış/eksik"),
+        ("Hakem doğru kaynağa ve neye bakılacağına yönlendirdi", bool(yonlendi), f"{len(yonlendi)} soru için kaynak + not"),
         ("Düzeltmeden sonra o soru korundu", bool(korunan), f"{len(korunan)} soru"),
         ("Korunan soru doğruya döndü", bool(duzeldi), f"{len(duzeldi)} soru doğru"),
     ]

@@ -913,7 +913,7 @@ def ogret_sinav(sid: str, gorev_id: str | None = None) -> dict:
             _gecikme()
         try:
             sonuc = oa.ikize_ogret(t["konu"], gorev["title"] if gorev else f"{t['konu']} anlat", "\n".join(t["cumleler"]),
-                                   emit=_e, oturum=sid)
+                                   emit=_e, oturum=sid, kaynaklar=_hakem_kaynaklari(tr, baslik))
         except ia.HATALAR:
             emit(s, "Gözlemevi", "Model yanıt vermedi; sınav yapılamadı. Biraz sonra yeniden dene.", "error", alan=alan)
             return {"ok": False, "mesaj": "Model şu an yanıt vermiyor. Biraz sonra yeniden dene."}
@@ -921,7 +921,7 @@ def ogret_sinav(sid: str, gorev_id: str | None = None) -> dict:
             return {"ok": False, "mesaj": sonuc.guvenlik.get("mesaj") or "Anlatım şu an ikize gönderilemedi."}
         gorunum = oa.public_view(sonuc)
         gorunum["kavram"] = baslik
-        gorunum["geri_bildirim"] = _hakem_geri_bildirimi(gorunum, t["cumleler"], baslik)
+        gorunum["geri_bildirim"] = _hakem_geri_bildirimi(gorunum, t["cumleler"], baslik, _hakem_kaynaklari(tr, baslik))
         if gorunum["geri_bildirim"]["ozet"]:
             emit(s, "Hakem", gorunum["geri_bildirim"]["ozet"], "decision" if gorunum["geri_bildirim"]["sorunlu"] else "done", alan=alan)
         t["son"] = gorunum
@@ -1261,18 +1261,37 @@ def sohbet(sid: str, metin: str, ajan: str | None = None, alan: str | None = Non
 
 
 # ------------------------------------------------------------ Hakem geri bildirimi
-def _hakem_geri_bildirimi(g: dict, cumleler: list[str], kavram: str) -> dict:
-    """Sınav sonrası anında geri bildirim: hangi cümle hatalı/eksik, ne eksik, nereye bakmalı. Cevabı söylemez."""
+def _hakem_kaynaklari(tr: dict, kavram: str) -> list[dict]:
+    """Hakem'in seçebileceği doğrulanmış kaynaklar: kavramın bölümleri, yoksa takımyıldızın birincil kaynağı."""
+    yon = kaynak_avcisi.kavram_bolumu(kavram)
+    if yon:
+        return yon
+    secim = (tr.get("kaynaklar") or {}).get("secim")
+    return [{"baslik": secim["baslik"], "url": secim["url"]}] if secim and secim.get("url") else []
+
+
+def _hakem_geri_bildirimi(g: dict, cumleler: list[str], kavram: str, kaynaklar: list[dict] | None = None) -> dict:
+    """Sınav sonrası anında geri bildirim: hangi cümle hatalı/eksik, hangi soruda yanılttı, hangi kaynakta neye
+    bakılacak. Cevabı söylemez; bağlantılar yalnızca doğrulanmış listeden gelir."""
     roman = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII", "XIII", "XIV", "XV", "XVI", "XVII", "XVIII", "XIX", "XX"]
+    yon = kaynaklar if kaynaklar is not None else kaynak_avcisi.kavram_bolumu(kavram)
     duzelt, eksik_soru, yanlis_soru = set(), [], []
+    rehber: dict[int, dict] = {}            # cümle no → {soru, kaynak, neye_bak}
+    eksikler = []
     for i, m in enumerate(g.get("items", [])):
+        k = m.get("kaynak")
+        kaynak = yon[k - 1] if isinstance(k, int) and 1 <= k <= len(yon) else (yon[0] if yon else None)
+        neye = m.get("neye_bak") or (f"Bu kaynakta “{kavram}” bölümünü aç; cümlendeki iddiayı oradaki anlatımla karşılaştır." if kaynak else None)
         if m["result"] in ("yanlis", "eksik"):
-            duzelt.update(m.get("cited") or [])
+            for c in (m.get("cited") or []):
+                duzelt.add(c)
+                rehber.setdefault(c, {"soru": m["question"], "sonuc": m["result"], "kaynak": kaynak, "neye_bak": neye})
         if m["result"] == "yanlis":
             yanlis_soru.append(i + 1)
         if m["result"] in ("eksik", "anlatilmadi"):
             eksik_soru.append(i + 1)
-    yon = kaynak_avcisi.kavram_bolumu(kavram)
+        if m["result"] in ("eksik", "anlatilmadi") and not m.get("cited"):
+            eksikler.append({"soru_no": i + 1, "soru": m["question"], "kaynak": kaynak, "neye_bak": neye})
     parcalar = []
     if yanlis_soru:
         parcalar.append(f"{', '.join(map(str, yanlis_soru))}. soruda ikizin yanlış öğrenmiş")
@@ -1281,10 +1300,10 @@ def _hakem_geri_bildirimi(g: dict, cumleler: list[str], kavram: str) -> dict:
     if duzelt:
         parcalar.append("düzeltilecek cümle: " + ", ".join(roman[c - 1] if c <= len(roman) else str(c) for c in sorted(duzelt)))
     ozet = ("Tüm sorular doğru; ikizin bu kavramı senden doğru öğrendi." if not parcalar
-            else (lambda m: m[:1].upper() + m[1:])("; ".join(parcalar)) + "." + (f" Bakman gereken yer: {yon[0]['baslik']}." if yon else ""))
+            else (lambda m: m[:1].upper() + m[1:])("; ".join(parcalar)) + ".")
     return {"sorunlu": bool(parcalar), "duzelt": sorted(duzelt), "yanlis_sorular": yanlis_soru, "eksik_sorular": eksik_soru,
-            "yonlendirme": yon, "ozet": ozet,
-            "duzelt_metin": [{"no": c, "cumle": cumleler[c - 1]} for c in sorted(duzelt) if 0 < c <= len(cumleler)]}
+            "yonlendirme": yon, "ozet": ozet, "eksikler": eksikler,
+            "duzelt_metin": [{"no": c, "cumle": cumleler[c - 1], **rehber.get(c, {})} for c in sorted(duzelt) if 0 < c <= len(cumleler)]}
 
 
 # ---------------------------------------------------------------- profil

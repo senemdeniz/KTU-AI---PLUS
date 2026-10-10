@@ -960,7 +960,7 @@ function ogretPano() {
     const m = metin.value.trim(); if (!m) return; uyari.hidden = true;
     await yap(async () => {
       const r = await api(`/v2/sessions/${S.sid}/teach/add`, 'POST', { metin: m, alan: aktifAlan().alan });
-      if (r.ok) { metin.value = ''; if (r.uyarilar?.length) { uyari.textContent = r.uyarilar.map((u) => u.mesaj).join(' '); uyari.hidden = false; } else bildir('İkizin yeni cümleleri öğrendi'); }
+      if (r.ok) { metin.value = ''; rehber = null; rehberCiz(); if (r.uyarilar?.length) { uyari.textContent = r.uyarilar.map((u) => u.mesaj).join(' '); uyari.hidden = false; } else bildir('İkizin yeni cümleleri öğrendi'); }
       else { uyari.textContent = (r.engel === 'konu_disi' ? 'Konu Bekçisi: ' : '') + r.mesaj; uyari.hidden = false; }
     });
   });
@@ -981,12 +981,24 @@ function ogretPano() {
     sonucKap.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
   });
   const silBtn = h('button', { class: 'baglanti sil-hepsi', onclick: () => yap(() => api(`/v2/sessions/${S.sid}/teach`, 'DELETE'), 'İkizin öğrendiklerini sildi') }, 'Hepsini sil');
-  const duzelt = async (no) => {
+  // Düzeltme rehberi: "Düzelt"e basınca yazı alanının üstünde kalır; kullanıcı neyi neden düzelttiğini ve nereye bakacağını görür
+  const rehberKap = h('div', {});
+  let rehber = null;
+  const kaynakDugmesi = (k, metinYazi = 'Kaynakta bak') => (k?.url ? h('a', { class: 'dugme kucuk kaynak-git', href: guvenliUrl(k.url), target: '_blank', rel: 'noopener noreferrer' }, `${metinYazi}: ${k.baslik} ↗`) : null);
+  const rehberCiz = () => rehberKap.replaceChildren(...(rehber ? [h('div', { class: 'duzelt-rehber', role: 'note' },
+    h('div', { class: 'rehber-bas' }, avatar('Hakem'), h('b', {}, `${rehber.etiket} cümleni düzeltiyorsun`),
+      h('button', { class: 'baglanti kucuk', type: 'button', onclick: () => { rehber = null; rehberCiz(); } }, 'Kapat')),
+    rehber.soru ? h('p', { class: 'kucuk sis' }, `Bu cümle şu soruda ikizini ${rehber.sonuc === 'eksik' ? 'eksik bıraktı' : 'yanılttı'}: “${rehber.soru}”`) : null,
+    rehber.neye_bak ? h('p', {}, h('b', {}, '1. Önce bak: '), rehber.neye_bak) : null,
+    kaynakDugmesi(rehber.kaynak),
+    h('p', { class: 'kucuk sis' }, '2. Cümleni aşağıda kendi sözlerinle düzelt ve “İkizine anlat”a bas. 3. Sonra ikizini yeniden sınava sok.'))] : []));
+  const duzelt = async (no, bilgi = null) => {
     await yap(async () => {
       const r = await api(`/v2/sessions/${S.sid}/teach/sentences/${no}`, 'DELETE');
       metin.value = r.cumle + (metin.value ? ' ' + metin.value : '');
-      metin.focus(); metin.setSelectionRange(0, r.cumle.length);
-      bildir(`${ROMEN[no - 1] || no}. cümle düzeltmen için yazı alanına alındı`);
+      rehber = { etiket: `${ROMEN[no - 1] || no}.`, ...(bilgi || {}) }; rehberCiz();
+      rehberKap.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
+      metin.focus({ preventScroll: true }); metin.setSelectionRange(0, r.cumle.length);
     });
   };
   const adim = (no, baslik, ...icerik) => h('section', { class: 'ogret-adim' }, h('h3', {}, h('span', { class: 'adim-no' }, no), baslik), ...icerik);
@@ -994,7 +1006,7 @@ function ogretPano() {
     h('div', { class: 'ogret-yerlesim' },
       h('div', { class: 'ogret-adimlar' },
         adim('1', 'Kavram seç', kavramCipKap, kavramSec, ipucuKap),
-        adim('2', 'Anlat', ikizBalon, cumleKap,
+        adim('2', 'Anlat', ikizBalon, cumleKap, rehberKap,
           h('div', { class: 'anlat-kutu' }, metin, gecici,
             h('div', { class: 'anlat-alt' }, h('div', { class: 'anlat-araclar' }, sesBtn, fotoBtn), ekleBtn)),
           uyari, onizleme, dosya,
@@ -1034,15 +1046,23 @@ function ogretPano() {
         ? `${cumleler.length} cümle öğrendim. ${hatali.size ? 'Hakem bazı cümlelerini işaretledi; onları düzeltirsen daha iyi cevap veririm.' : 'Biraz daha anlatabilir ya da beni sınava sokabilirsin.'}`
         : `“${kavramAdi}” hakkında hiçbir şey bilmiyorum. Bana bir arkadaşına anlatır gibi anlatır mısın?`)));
     cumleKap.replaceChildren(...(cumleler.length ? [h('ol', { class: 'cumleler' }, cumleler.map((c, i) => h('li', { class: hatali.has(i + 1) ? 'hatali' : '' },
-      h('span', {}, c, hatali.has(i + 1) ? h('button', { class: 'baglanti duzelt', onclick: () => duzelt(i + 1) }, 'Düzelt') : null)))), h('div', { style: 'text-align:right' }, silBtn)] : []));
+      h('span', {}, c, hatali.has(i + 1) ? h('button', { class: 'baglanti duzelt', onclick: () => { const d = gb?.duzelt_metin?.find((x) => x.no === i + 1); duzelt(i + 1, d ? { soru: d.soru, sonuc: d.sonuc, kaynak: d.kaynak, neye_bak: d.neye_bak } : null); } }, 'Düzelt') : null)))), h('div', { style: 'text-align:right' }, silBtn)] : []));
     sinavBtn.disabled = !cumleler.length || sinavBtn.textContent !== 'İkizini sınava sok';
     sonucKap.replaceChildren(...(son ? [h('h3', { style: 'font-size:26px;margin-bottom:6px' }, `İkiz sınavda: ${son.kavram || son.topic}`),
       h('div', { class: 'yildiz-sonuc' }, h('b', { style: 'font-family:var(--baslik);font-size:34px' }, `${son.score} / ${son.total}`), h('span', { class: 'sis' }, son.star === 'halkali' ? 'İkizin bu kavramı tam biliyor: halkalı yıldız yandı' : son.star === 'parlak' ? 'İkizin kısmen öğrendi: yıldız yandı, halkası için eksikleri tamamla' : 'İkizin henüz öğrenemedi: yıldız sönük')),
       gb ? h('div', { class: 'hakem-kutu' + (gb.sorunlu ? ' sorunlu' : '') },
         h('div', { style: 'display:flex;gap:12px;align-items:flex-start' }, avatar('Hakem'), h('div', {}, h('b', {}, 'Hakem'), h('p', {}, gb.ozet))),
         gb.duzelt_metin?.length ? h('div', { class: 'duzelt-liste' }, h('span', { class: 'kucuk sis2' }, 'Düzeltmen gereken cümleler'),
-          gb.duzelt_metin.map((d) => h('div', { class: 'duzelt-satir' }, h('b', {}, `${ROMEN[d.no - 1] || d.no}.`), h('span', {}, d.cumle), dugme('Düzelt', () => duzelt(d.no), 'ince kucuk')))) : null,
-        gb.yonlendirme?.length ? h('div', {}, h('span', { class: 'kucuk sis2' }, 'Doğru yer'), h('div', { class: 'yon-linkler' }, gb.yonlendirme.map((y) => h('a', { class: 'dugme kucuk', href: guvenliUrl(y.url), target: '_blank', rel: 'noopener noreferrer' }, y.baslik)))) : null) : null,
+          gb.duzelt_metin.map((d) => h('div', { class: 'duzelt-kart' },
+            h('div', { class: 'duzelt-satir' }, h('b', {}, `${ROMEN[d.no - 1] || d.no}.`), h('span', {}, d.cumle),
+              dugme('Düzelt', () => duzelt(d.no, { soru: d.soru, sonuc: d.sonuc, kaynak: d.kaynak, neye_bak: d.neye_bak }), 'kucuk')),
+            d.soru ? h('p', { class: 'kucuk sis' }, `${d.sonuc === 'eksik' ? 'Eksik bıraktığı' : 'Yanılttığı'} soru: “${d.soru}”`) : null,
+            d.neye_bak ? h('p', { class: 'kucuk' }, h('b', {}, 'Neye bak: '), d.neye_bak) : null,
+            kaynakDugmesi(d.kaynak)))) : null,
+        gb.eksikler?.length ? h('div', { class: 'duzelt-liste' }, h('span', { class: 'kucuk sis2' }, 'Henüz anlatmadıkların'),
+          gb.eksikler.map((e) => h('div', { class: 'duzelt-kart' }, h('p', { class: 'kucuk' }, h('b', {}, `Soru ${e.soru_no}: `), e.soru),
+            e.neye_bak ? h('p', { class: 'kucuk sis' }, h('b', {}, 'Neye bak: '), e.neye_bak) : null, kaynakDugmesi(e.kaynak)))) : null,
+        !gb.duzelt_metin?.length && !gb.eksikler?.length && gb.yonlendirme?.length ? h('div', {}, h('span', { class: 'kucuk sis2' }, 'Kaynak'), h('div', { class: 'yon-linkler' }, gb.yonlendirme.map((y) => kaynakDugmesi(y, 'Aç')))) : null) : null,
       ...son.items.map((m, i) => h('div', { class: 'sinav-madde' }, h('span', { class: 'kucuk sis2' }, `Soru ${i + 1}${m.hedef?.length ? ` · sınadığı cümlen: ${m.hedef.map((c) => ROMEN[c - 1] || c).join(', ')}` : ''}`), h('b', {}, m.question),
         h('span', { class: 'kucuk sis2' }, `İkiz (yapay zekâ) yanıtı${m.cited?.length ? ` · dayandığı cümle: ${m.cited.map((c) => ROMEN[c - 1] || c).join(', ')}` : ''}`), h('p', {}, m.twin_answer),
         h('span', { class: `karar ${m.result}` }, { dogru: 'Doğru', eksik: 'Eksik', yanlis: 'Yanlış', anlatilmadi: 'Anlatılmadı' }[m.result]),

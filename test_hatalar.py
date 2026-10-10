@@ -408,3 +408,34 @@ def test_kasif_sorulari_anlatima_dayanir_ve_hatali_soru_korunur(monkeypatch):
     assert gelen[0]["anlatim"] == {"1": cumleler[0], "2": cumleler[1]}           # Kaşif cümleleri görür
     assert [q.question for q in sorular] == ["Başa ekleme neden hızlıdır?", "Bağlı listede 5. elemana nasıl ulaşılır?"]
     assert [q.id for q in sorular] == ["q1", "q2"] and sorular[1].hedef == [2]    # geçersiz cümle numarası atılır
+
+
+# ---------------------------------------------------------------- Hakem: hataya özel kaynak yönlendirmesi
+def test_hakem_yalniz_dogrulanmis_kaynaga_yonlendirir_ve_cevabi_sizdirmaz(monkeypatch):
+    exam = [oa.ExamQuestion("q1", "5. elemana nasıl ulaşılır?", "Baştan düğüm düğüm gezilir.", ["baştan"], [2])]
+    ans = [oa.TwinAnswer("q1", "İndeksle doğrudan.", [2])]
+    kaynaklar = [{"baslik": "VisuAlgo: Linked List", "url": "https://visualgo.net/en/list"}]
+    monkeypatch.setattr(ia, "is_mock", lambda: False)
+    gelen = {}
+    def sahte(system, payload, **k):
+        gelen.update(payload)
+        return {"verdicts": [{"question_id": "q1", "result": "yanlis", "hint": None, "kaynak": 1,
+                              "neye_bak": "Search işlemini çalıştır ve kaç adım sürdüğünü say."}]}
+    monkeypatch.setattr(ia, "llm_json", sahte)
+    v = oa.hakem(exam, ["a", "İndeksle doğrudan ulaşılır."], ans, kaynaklar)[0]
+    assert gelen["kaynaklar"] == [{"no": 1, "baslik": "VisuAlgo: Linked List"}]          # Hakem bağlantı görmez
+    assert v.kaynak == 1 and "Search" in v.neye_bak
+    monkeypatch.setattr(ia, "llm_json", lambda s, p, **k: {"verdicts": [{"question_id": "q1", "result": "yanlis", "hint": None,
+                                                                          "kaynak": 5, "neye_bak": "Baştan düğüm düğüm gezilir."}]})
+    v = oa.hakem(exam, ["a", "İndeksle doğrudan ulaşılır."], ans, kaynaklar)[0]
+    assert v.kaynak is None and v.neye_bak is None                                        # uydurma numara ve cevabı sızdıran not atılır
+
+
+def test_geri_bildirim_her_hatali_cumleye_kaynak_ve_soru_verir():
+    g_ = {"items": [{"question": "5. elemana nasıl ulaşılır?", "cited": [2], "result": "yanlis", "kaynak": 1, "neye_bak": "Search'i izle."},
+                    {"question": "Başa ekleme neden hızlı?", "cited": [], "result": "anlatilmadi", "kaynak": None, "neye_bak": None}]}
+    gb = g._hakem_geri_bildirimi(g_, ["a", "İndeksle doğrudan ulaşılır."], "bağlı liste",
+                                 [{"baslik": "VisuAlgo: Linked List", "url": "https://visualgo.net/en/list"}])
+    d = gb["duzelt_metin"][0]
+    assert d["no"] == 2 and d["soru"].startswith("5.") and d["kaynak"]["url"].startswith("https://visualgo") and d["neye_bak"] == "Search'i izle."
+    assert gb["eksikler"][0]["kaynak"]["baslik"] == "VisuAlgo: Linked List" and gb["eksikler"][0]["neye_bak"]
