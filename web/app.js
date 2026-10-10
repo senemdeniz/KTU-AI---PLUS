@@ -388,12 +388,30 @@ function ikizOzeti(a, kompakt = false) {
     h('div', { class: 'ikiz-gok' }, ikizGogu(ik.yildizlar.filter((y) => !y.id.startsWith('serbest-')), 760, 200)),
     sira ? h('div', { class: 'sag-eylem' }, dugme(`Öğret: ${sira.baslik}`, () => ogretAc(a.alan, sira.id), 'kucuk')) : null);
 }
+// Takımyıldızı kabın GERÇEK boyutunda çizer: küçük bir tuvali büyütmek noktaları ve çizgileri kalınlaştırıyordu.
+// Böylece kart ne kadar geniş olursa olsun yıldızlar karşılama sayfasındaki gibi ince ve küçük kalır.
+function olcekliGok(ayar, { oran = 0.36, enYuksek = 300, kapSinifi = 'kart-gok', tamDoldur = false } = {}) {
+  const kap = h('span', { class: `${kapSinifi} olcekli` });
+  let sonW = 0, sonH = 0;
+  const ciz = () => {
+    const w = Math.round(kap.clientWidth);
+    if (!w) return;
+    const hh = tamDoldur ? Math.round(kap.clientHeight) : Math.round(Math.min(Math.max(w * oran, 120), enYuksek));
+    if (Math.abs(w - sonW) < 6 && Math.abs(hh - sonH) < 6) return;
+    sonW = w; sonH = hh;
+    const yeni = takimyildiz({ ...ayar, w, h: hh });
+    const eski = kap.querySelector('svg'); eski ? eski.replaceWith(yeni) : kap.prepend(yeni);
+  };
+  new ResizeObserver(ciz).observe(kap);
+  requestAnimationFrame(ciz);
+  return kap;
+}
 function takimyildizlarim(v, yenile) {
   return h('section', { class: 'takimlar', 'aria-label': 'Takımyıldızların' },
     h('div', { class: 'takimlar-bas' }, h('h3', {}, 'Takımyıldızların'), h('button', { class: 'baglanti', onclick: () => sekmeGit('profil') }, 'Yeni takımyıldız aç')),
     h('div', { class: 'takimlar-satir' }, v.alanlar.map((a, i) => h('button', { class: 'takim-kart' + (i === S.alan ? ' secili' : ''), 'aria-pressed': String(i === S.alan), onclick: () => { S.alan = i; yenile(); } },
       h('span', { class: 'ic' },
-        a.hazir ? h('span', { class: 'kart-gok' }, takimyildiz({ sen: a.ilerleme.sen_yildiz, rota: a.ilerleme.rota_yildiz, toplam: a.ilerleme.toplam_yildiz, w: 320, h: 150, etiket: false })) : h('span', { class: 'kuruluyor' }, yaziyor()),
+        a.hazir ? olcekliGok({ sen: a.ilerleme.sen_yildiz, rota: a.ilerleme.rota_yildiz, toplam: a.ilerleme.toplam_yildiz, etiket: false }, { oran: 0.36, enYuksek: 260 }) : h('span', { class: 'kuruluyor' }, yaziyor()),
         h('b', {}, a.konu),
         h('span', { class: 'kucuk sis' }, a.hazir ? `${a.ilerleme.sen_yildiz}/${a.ilerleme.toplam_yildiz} yıldız · ${ikizAdi(a)} %${a.ikiz.bilgi_yuzde}` : 'Ekip kuruyor…'))))));
 }
@@ -406,7 +424,7 @@ function gokyuzuPano() {
       takimyildizlarim(v, () => guncelle(S.view)),
       baslikSatiri(il ? `${il.gun + 1}. gün` : `${v.gun}. gün`, il ? `Merhaba ${v.ad}. ${a.konu} için ${a.hedef.sure} günlük rotanın ${il.gun + 1}. günündesin.` : `Merhaba ${v.ad}.`, dugme('Ekibe görev ver', () => { sekmeGit('ekip'); setTimeout(() => $('#komut-metin')?.focus(), 50); })),
       il ? h('section', { class: 'gok-bolumu' },
-        h('div', {}, h('div', { class: 'takim' }, takimyildiz({ sen: il.sen_yildiz, rota: il.rota_yildiz, toplam: il.toplam_yildiz }), h('span', { class: 'koordinat' }, a.konu)),
+        h('div', {}, h('div', { class: 'takim' }, olcekliGok({ sen: il.sen_yildiz, rota: il.rota_yildiz, toplam: il.toplam_yildiz }, { kapSinifi: 'takim-gok', tamDoldur: true }), h('span', { class: 'koordinat' }, a.konu)),
           h('div', { class: 'lejant' }, h('span', {}, h('i', { class: 'nokta-altin' }), 'Senin yaktıkların'), h('span', {}, h('i', { class: 'nokta-rota' }), 'Rota: planı aksatmasaydın bugün burada olurdun'))),
         h('div', { class: 'rakamlar' },
           h('div', { class: 'rakam' }, h('span', {}, 'Yanan yıldız'), h('b', {}, `${il.sen_yildiz} / ${il.toplam_yildiz}`)),
@@ -1223,7 +1241,7 @@ function takimlarPano() {
   el.append(baslikSatiri('Takımyıldızların', 'Şimdiye kadar açtığın tüm konular. Her konunun kendi ikizi var. Altın yıldızlar senin yaktıkların, ikizin yıldızları ona öğrettiklerin.'), liste);
   const guncelle = (v) => {
     liste.replaceChildren(...v.alanlar.map((a, i) => h('article', { class: 'takim-buyuk' },
-      a.hazir ? h('div', { class: 'kart-gok' }, takimyildiz({ sen: a.ilerleme.sen_yildiz, rota: a.ilerleme.rota_yildiz, toplam: a.ilerleme.toplam_yildiz, w: 520, h: 230 })) : h('div', { class: 'kuruluyor' }, yaziyor()),
+      a.hazir ? olcekliGok({ sen: a.ilerleme.sen_yildiz, rota: a.ilerleme.rota_yildiz, toplam: a.ilerleme.toplam_yildiz }, { oran: 0.44, enYuksek: 280 }) : h('div', { class: 'kuruluyor' }, yaziyor()),
       h('div', { class: 'takim-buyuk-bas' }, h('div', {}, h('h3', {}, a.konu), h('p', { class: 'kucuk sis' }, `${a.etiket}${a.hazir ? ` · ${a.ilerleme.gun + 1}. gün / ${a.hedef.sure}` : ''}`)),
         a.hazir ? h('b', { class: 'ikiz-yuzde', title: 'İkizinin bilgisi' }, `%${a.ikiz.bilgi_yuzde}`) : null),
       a.hazir ? h('div', { class: 'kart-ikiz-satir', style: `--ikiz:${a.ikiz_kimlik?.renk || '#8ea2ff'}` }, h('div', { class: 'kart-ikiz-kim' }, ikizAvatar(S.view, a, 64), h('b', {}, ikizAdi(a)), h('span', { class: 'kucuk sis' }, 'bu konunun ikizi')),
