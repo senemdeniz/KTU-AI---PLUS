@@ -511,7 +511,12 @@ function anaKaynakSade(k, birincil) {
     h('div', {}, h('span', { class: 'kucuk sis2' }, 'Önerilen platform'), h('h3', {}, p.ad), h('p', { class: 'kucuk sis' }, `“${p.terim}” konu sayfası · ${p.dil}`)),
     h('a', { class: 'dugme kucuk', href: guvenliUrl(p.url), target: '_blank', rel: 'noopener noreferrer' }, 'Konu sayfasına git')) : null;
 }
-const katla = (baslik, ...icerik) => h('details', { class: 'katla' }, h('summary', {}, baslik), h('div', { class: 'katla-ic' }, ...icerik));
+// Katlanır bölüm: açık/kapalı durumu `acik` kümesinde tutulur; sayfa periyodik yenilense de kullanıcı kapatana kadar açık kalır.
+const katla = (acik, anahtar, baslik, ...icerik) => {
+  const d = h('details', { class: 'katla', open: acik.has(anahtar) || undefined }, h('summary', {}, baslik), h('div', { class: 'katla-ic' }, ...icerik));
+  d.addEventListener('toggle', () => (d.open ? acik.add(anahtar) : acik.delete(anahtar)));
+  return d;
+};
 function kendiKaynakFormu(a) {
   const baslik = h('input', { class: 'girdi', id: 'kk-baslik', maxlength: 120, placeholder: 'Örn. Hocamın ders notları, Grokking Algorithms' });
   const url = h('input', { class: 'girdi', id: 'kk-url', maxlength: 500, placeholder: 'https://… (isteğe bağlı)', inputmode: 'url' });
@@ -588,6 +593,7 @@ function haritaPano() {
   const el = h('div', {});
   const otoKontrol = new Set();
   const haftaAcik = new Map();
+  const katlaAcik = new Set();
   const formlar = {};
   let kontrolEdiliyor = false;
   const kontrolEt = async (alan, sessiz = false) => {
@@ -609,13 +615,13 @@ function haritaPano() {
       anaKaynakSade(a.kaynaklar, birincil),
       h('section', { class: 'bolum' }, h('h3', {}, 'Rotan'), haftalikRota(a, bugun, bolumBy, haftaAcik)),
       h('div', { class: 'katla-grup' },
-        katla('Neden bu hedef?', h('p', { class: 'sis' }, a.hedef.gerekce), h('p', { class: 'kucuk sis2' }, `Başarı ölçütü: ${a.hedef.olcut}. Süreyi Profil’den değiştirebilirsin.`)),
-        katla('Tüm kaynaklar ve strateji',
+        katla(katlaAcik, `${a.alan}:neden`, 'Neden bu hedef?', h('p', { class: 'sis' }, a.hedef.gerekce), h('p', { class: 'kucuk sis2' }, `Başarı ölçütü: ${a.hedef.olcut}. Süreyi Profil’den değiştirebilirsin.`)),
+        katla(katlaAcik, `${a.alan}:kaynaklar`, 'Tüm kaynaklar ve strateji',
           h('div', { class: 'sag-eylem', style: 'justify-content:flex-start;margin-bottom:8px' },
             dugme(kontrolEdiliyor ? 'Kontrol ediliyor…' : 'Bağlantıları kontrol et', () => kontrolEt(a.alan), 'ince kucuk'),
             dugme('Yeniden tara', () => yap(() => api(`/v2/sessions/${S.sid}/assign`, 'POST', { metin: 'Kaynak öner' }), 'Kaynak Avcısı yeniden tarıyor'), 'ince kucuk')),
           kaynakBolumu(a.kaynaklar, a.kaynak_kontrol)),
-        katla('Kendi kaynağını ekle', kendiKaynaklar(a), (formlar[a.alan] ??= kendiKaynakFormu(a)))));
+        katla(katlaAcik, `${a.alan}:kendi`, 'Kendi kaynağını ekle', kendiKaynaklar(a), (formlar[a.alan] ??= kendiKaynakFormu(a)))));
   };
   return { el, guncelle };
 }
