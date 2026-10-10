@@ -6,4 +6,6 @@ __pycache__/
 
 # Gizli anahtarlar ve yerel veri
 .env
+.env.*
+!.env.example
 *.db

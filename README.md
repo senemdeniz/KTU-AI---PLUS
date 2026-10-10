@@ -14,16 +14,31 @@ Gökyüzünde üç şey görürsün:
 
 ## Hızlı başlangıç
 
-Python 3.10 ya da üstü gerekir.
+Python 3.10 ya da üstü gerekir ([python.org](https://www.python.org/downloads/)). Tek komut yeter:
 
 ```bash
 git clone https://github.com/senemdeniz/KTU-AI---PLUS.git ikiz
 cd ikiz
-python3 -m pip install -r requirements.txt
-python3 -m uvicorn server:app --port 8000
+./baslat.sh          # Windows'ta: baslat.bat
 ```
 
-Tarayıcıda **http://127.0.0.1:8000** adresini aç. Ardından:
+Betik şunları yapar:
+- sanal ortamı kurar ve paketleri yükler,
+- ilk çalıştırmada ücretsiz Groq anahtarını sorar ([console.groq.com/keys](https://console.groq.com/keys)) ve `.env` dosyasına yazar. Boş bırakırsan uygulama demo modunda açılır.
+- model bağlantısını sınar,
+- tarayıcıda **http://127.0.0.1:8000** adresini açar.
+
+<details><summary>Elle kurmak istersen</summary>
+
+```bash
+python3 -m pip install -r requirements.txt
+cp .env.example .env        # LLM_API_KEY= satırına anahtarını yaz
+python3 llm_kontrol.py      # bağlantıyı sına
+python3 -m uvicorn server:app --port 8000
+```
+</details>
+
+Ardından:
 
 1. **Kayıt ol:** kullanıcı adı ve şifre seç.
 2. Kendini tanıt: konu, süre, avatar. Ekip gökyüzünü canlı olarak kurar.
@@ -74,7 +89,8 @@ python3 -m uvicorn server:app --port 8000
 Sol alttaki rozet **“Demo modu”** yerine **“Canlı: gpt-oss-120b + gpt-oss-20b”** gösterir; Ekip sekmesindeki her ajan kartında o ajanın modeli yazar.
 
 - **`.env` GitHub'a gitmez** (`.gitignore`'da). Anahtarını koda, sohbete ya da ekran görüntüsüne koyma.
-- **Codespaces'te:** anahtarı **Settings → Secrets and variables → Codespaces** altına `LLM_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL` ve `LLM_MODEL_HIZLI` olarak ekle.
+- **Yalnızca anahtar yeter:** Groq anahtarı (`gsk_` ile başlar) tanınır. `LLM_BASE_URL` ve model satırları boşsa Groq adresi ile `gpt-oss-120b` ve `gpt-oss-20b` kendiliğinden seçilir.
+- **Codespaces'te:** anahtarı **Settings → Secrets and variables → Codespaces** altına `LLM_API_KEY` adıyla ekle; diğer ayarlar isteğe bağlıdır.
 - **Görüntü ve ses:**
   - Fotoğraftan öğretmek için `LLM_VISION_MODEL` değişkenine sağlayıcının görüntü modelini yaz.
   - Groq'ta sesli anlatım sunucudaki Whisper ile kendiliğinden açılır. Diğer sağlayıcılarda tarayıcının ses tanıması kullanılır.
@@ -96,7 +112,7 @@ Her ajanın tek bir işi vardır. Uygulamada **Ekip** sekmesinde her ajanın kar
 | Haritacı | Hedefi seçtiğin gün sayısına göre küçük günlük görevlere böler | Kurulumda, süre değişince | Yapay zekâ |
 | Kaynak Avcısı | Konunun türüne göre güvenilir kaynak bulur, en uygun tekini gerekçesiyle seçer; bağlantı uydurmaz | Kurulumda, istediğinde | Yapay zekâ + kural |
 | Gözcü | Bitirdiklerini rotanla karşılaştırıp riski ölçer (tahmin değil, hesap) | Her gün sonunda | Kural |
-| Yörüngeci | Geride kalınca en hafif çözümü bulur; büyük değişikliği onayına sunar | Geride kalınca | Yapay zekâ |
+| Yörüngeci | Geride kalınca en hafif çözümü bulur; istersen planı ilerlemene göre yeniden optimize eder ya da sınav tarihine göre düzenler. Büyük değişikliği önce/sonra özetiyle onayına sunar | Geride kalınca, görev verince | Yapay zekâ |
 | Rehber | Suçlamadan, bugün yapabileceğin tek net adımı söyler | Her gün, sorduğunda | Yapay zekâ |
 | Konu Bekçisi | İkizine anlattığının konuyla ilgisini denetler; konu dışını ve kişisel bilgiyi geçirmez | Her anlatımda | Yapay zekâ + kural |
 | Kaşif | Sınav soruları ve doğru cevapları hazırlar, cevapları ikizden saklar | Sınavda | Yapay zekâ |
@@ -104,7 +120,7 @@ Her ajanın tek bir işi vardır. Uygulamada **Ekip** sekmesinde her ajanın kar
 | Hakem | Cevapları bağımsız puanlar, hatalı cümleni gösterir, kaynağın doğru bölümüne yönlendirir | Sınavdan sonra | Yapay zekâ + kural |
 
 **Ana ajan nasıl karar verir?** Gözlemevi ekibe verdiğin görevi okur.
-- **Seçim:** Dört işten (sınav planı, mini sınav, kaynak, planı hafifletme) uygun olanları ve hangi takımyıldızda yapılacağını seçer. Kararını akışa "Kararım: …" diye gerekçesiyle yazar.
+- **Seçim:** Beş işten (sınav planı, mini sınav, kaynak, planı hafifletme, planı yeniden optimize etme) uygun olanları ve hangi takımyıldızda yapılacağını seçer. Kararını akışa "Kararım: …" diye gerekçesiyle yazar.
 - **Sorular:** Sorulara hangi ajanın cevap vereceğine de o karar verir.
 - **Sınırlar:** Model yalnızca bu listeden seçebilir, yeni iş uyduramaz. Model cevap vermezse ya da bozuk cevap verirse anahtar kelime kurallarına döner ve bunu söyler.
 

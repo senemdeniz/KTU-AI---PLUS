@@ -8,9 +8,11 @@ os.environ.update(AJAN_SENKRON="1", AJAN_GECIKME="0", LLM_PROVIDER="mock", IKIZ_
                   IKIZ_KAYIT_LIMIT="100000", IKIZ_YAZMA_LIMIT="100000", IKIZ_GENEL_LIMIT="100000")
 os.environ.setdefault("IKIZ_DB", os.path.join(tempfile.mkdtemp(), "t.db"))
 
+import copy
 import json
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
+import pytest
 from fastapi.testclient import TestClient
 
 import gozlemevi as g
@@ -320,3 +322,59 @@ def test_ajan_basina_model_secimi(monkeypatch):
     assert ia.model_name("Gözlemevi") == ia.model_name("Konu Bekçisi") == ia.model_name("sohbet") == "hizli-model"
     monkeypatch.delenv("LLM_MODEL_HIZLI")
     assert ia.model_name("Gözlemevi") == "buyuk-model"                        # hızlı model yazılmadıysa tek model
+
+
+# ---------------------------------------------------------------- Yörüngeci: planı yeniden optimize etme
+def _hazir_oturum():
+    c = _istemci()
+    sid = c.post("/v2/sessions", json={"akademik": "Veri Yapıları"}).json()["session_id"]
+    return c, sid
+
+
+def test_optimize_gorevi_kurala_da_eslenir():
+    assert "optimize" in g._kw("Planımı ilerlememe göre yeniden optimize et")
+    assert g._kw("Vizem var, planı yeniden düzenle") == {"sinav_plani"}
+
+
+def test_optimize_onaya_sunulur_ve_onaylaninca_uygulanir(monkeypatch):
+    c, sid = _hazir_oturum()
+    once = copy.deepcopy(store.get(sid)["tracks"]["akademik"]["roadmap"])
+    r = c.post(f"/v2/sessions/{sid}/assign", json={"metin": "Planımı yeniden optimize et"}).json()
+    assert r["ok"]
+    assert store.get(sid)["tracks"]["akademik"]["roadmap"] == once          # onaysız plan değişmez
+    oneriler = c.get(f"/v2/sessions/{sid}").json()["oneriler"]
+    assert len(oneriler) == 1 and any(d["etiket"] == "Kalan görev" for d in oneriler[0]["degisiklikler"])
+    assert c.post(f"/v2/sessions/{sid}/proposals/{oneriler[0]['id']}/approve").status_code == 200
+    gorevler = store.get(sid)["tracks"]["akademik"]["roadmap"]["tasks"]
+    kimlikler = [t["id"] for t in gorevler]
+    assert len(kimlikler) == len(set(kimlikler)) and all(kimlikler)
+
+
+@pytest.mark.parametrize("cikti", [{"updated_tasks": []}, {"updated_tasks": "yok"}, {"x": 1},
+                                   {"updated_tasks": [{"title": "Tek görev", "day": 2}]}])
+def test_optimize_bozuk_model_plani_bozmaz(monkeypatch, cikti):
+    c, sid = _hazir_oturum()
+    once = copy.deepcopy(store.get(sid)["tracks"]["akademik"]["roadmap"])
+    monkeypatch.setattr(ia, "is_mock", lambda: False)
+    monkeypatch.setattr(ia, "llm_json", lambda system, payload, **k: cikti if system is ia.PLAN_OPTIMIZER else ia._mock(system, payload))
+    assert c.post(f"/v2/sessions/{sid}/assign", json={"metin": "Planımı yeniden optimize et"}).json()["ok"]
+    assert store.get(sid)["tracks"]["akademik"]["roadmap"] == once
+    assert c.get(f"/v2/sessions/{sid}").json()["oneriler"] == []
+    assert any(e["tur"] == "error" and e["ajan"] == "Yörüngeci" for e in store.get(sid)["olaylar"])
+
+
+def test_plan_dogrula_gecmise_tasmaz_ve_sinirlar():
+    yeni = ia.plan_dogrula([{"day": -3, "title": "A", "minutes": 9999, "difficulty": 40, "type": "uydurma", "skill": "x"},
+                            {"day": 99, "title": "B", "minutes": "20", "difficulty": "2", "type": "teach", "skill": "s"}],
+                           5, 21, 2, {"s"})
+    assert [t["day"] for t in yeni] == [5, 21] and yeni[0]["minutes"] == 180 and yeni[0]["difficulty"] == 5
+    assert yeni[0]["type"] == "practice" and all(t["skill"] == "s" and t["id"] == "" and not t["done"] for t in yeni)
+
+
+def test_groq_anahtari_tek_basina_yeter(monkeypatch):
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    for k in ("LLM_BASE_URL", "LLM_MODEL", "LLM_MODEL_HIZLI", "ANTHROPIC_API_KEY", "HF_TOKEN"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("LLM_API_KEY", "gsk_ornek")
+    assert ia._taban() == "https://api.groq.com/openai/v1"
+    assert ia.model_name("Haritacı") == "openai/gpt-oss-120b" and ia.model_name("Rehber") == "openai/gpt-oss-20b"

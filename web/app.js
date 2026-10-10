@@ -742,7 +742,7 @@ function ekipPano() {
   const ajanSec = h('select', { class: 'girdi', style: 'min-height:38px;padding:0 10px;width:auto', 'aria-label': 'Hangi ajan', hidden: true });
   const modDugmeleri = [['gorev', 'Görev ver'], ['soru', 'Soru sor']].map(([k, ad]) => h('button', { type: 'button', class: 'sekme', 'aria-pressed': String(k === mod), onclick: () => { mod = k; modGuncelle(); } }, ad));
   const ornekler = h('div', { class: 'oneriler' });
-  const ORN = { gorev: ['Gelecek hafta vizem var, planı ona göre ayarla', 'Mini sınav hazırla', 'Bu hafta yoğunum, planı hafiflet', 'Kaynak öner'], soru: ['Planım nasıl gidiyor?', 'Bugün motivasyonum yok', 'Neden bu hedefi seçtin?'] };
+  const ORN = { gorev: ['Planımı ilerlememe göre yeniden optimize et', 'Gelecek hafta vizem var, planı ona göre ayarla', 'Mini sınav hazırla', 'Bu hafta yoğunum, planı hafiflet', 'Kaynak öner'], soru: ['Planım nasıl gidiyor?', 'Bugün motivasyonum yok', 'Neden bu hedefi seçtin?'] };
   const modGuncelle = () => {
     modDugmeleri.forEach((b, i) => b.setAttribute('aria-pressed', String(['gorev', 'soru'][i] === mod)));
     ajanSec.hidden = mod !== 'soru';
@@ -804,7 +804,8 @@ function ekipPano() {
     if (!ajanSec.options.length) ajanSec.replaceChildren(h('option', { value: '' }, 'Otomatik'), ...v.sohbet_ajanlari.map((a) => h('option', { value: a }, a)));
     oneriKap.replaceChildren(...v.oneriler.map((p) => h('div', { class: 'oner-kart' },
       h('div', { style: 'display:flex;gap:10px;align-items:center' }, avatar(p.kaynak), h('b', {}, `${p.kaynak} onayını bekliyor`)), h('h3', { style: 'font-size:22px' }, p.baslik), h('p', {}, p.ozet),
-      ...p.degisiklikler.map((d) => h('div', { class: 'fark-satir' }, `${d.etiket}: ${d.once} → `, h('b', {}, d.sonra))),
+      ...p.degisiklikler.map((d) => h('div', { class: 'fark-satir' }, d.once ? `${d.etiket}: ${d.once} → ` : '• ', h('b', {}, d.sonra))),
+      p.model ? h('p', { class: 'kucuk sis' }, `Bu öneriyi ${p.model} modeli hazırladı. Onaylamadan planın değişmez.`) : null,
       h('div', { class: 'sag-eylem' }, dugme('Onayla', () => yap(() => api(`/v2/sessions/${S.sid}/proposals/${p.id}/approve`, 'POST'), 'Değişiklik uygulandı')), dugme('Reddet', () => yap(() => api(`/v2/sessions/${S.sid}/proposals/${p.id}/reject`, 'POST'), 'Plan olduğu gibi kaldı'), 'ince')))));
     gorevKap.replaceChildren(...v.gorevler.slice().reverse().slice(0, 3).map((g) => h('div', { class: 'yanit-kutu' }, h('span', { class: 'kucuk sis2' }, 'Verdiğin görev'), h('b', {}, g.metin),
       ...g.atamalar.map((a) => h('div', { style: 'display:flex;gap:10px;align-items:center' }, avatar(a.ajan), h('span', { class: 'sis' }, `${a.durum === 'bitti' ? '✓' : '…'} ${a.is}`))),

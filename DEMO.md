@@ -1,6 +1,6 @@
 # Jüri demosu (4–5 dakika)
 
-Çalıştır: `python3 -m uvicorn server:app --port 8000`, sonra tarayıcıda `http://127.0.0.1:8000` adresini aç. Canlı model için önce `.env` dosyasını doldur (bkz. README).
+Çalıştır: `./baslat.sh` (Windows'ta `baslat.bat`). Betik ilk çalıştırmada Groq anahtarını sorar, bağlantıyı sınar ve tarayıcıyı açar. Sol alttaki rozet **“Canlı: gpt-oss-120b + gpt-oss-20b”** göstermeli. **“Demo modu”** görürsen anahtar okunmamıştır.
 
 **En hızlı yol:** Ana sayfada **“Kayıt olmadan canlı demoyu izle”** bağlantısına tıkla. Uygulama öğretme akışını gerçek API çağrılarıyla kendi kendine oynatır (yaklaşık 40 sn).
 
@@ -13,7 +13,13 @@
 5. **Otonom döngü (45 sn).** Bugün → demo kontrolü: 5 gün, %25. Gözcü seni rotanla karşılaştırır, Yörüngeci planı hafifletir, büyük değişiklik onay kartı olarak gelir.
 6. **İkizine öğret (60 sn).** Kavram: bağlı liste. Bir doğru ve bir hatalı cümle anlat, sonra **İkizini sınava sok**. Hakem hatalı cümleyi gösterir ve kaynağın doğru bölümüne (VisuAlgo: Linked List) yönlendirir. Düzelt ve yeniden sınava sok: yıldız halkalanır.
 7. **Ana ajan ve ekip (30 sn).** Ekip → Görev ver: "Bu hafta çok yoğunum, ayrıca kaynak öner". Gözlemevi kararını akışa yazar ("Kararım: görevi 2 işe böldüm…") ve işi Yörüngeci ile Kaynak Avcısı'na verir. Hakem kartına dokun: değerlendirme ve yönlendirme açılır. Kartların altında her ajanın modeli yazar.
-8. **Çıkış ve giriş (20 sn).** Çıkış yap, aynı bilgilerle giriş yap: iki takımyıldız ve iki ikiz yerinde.
+8. **Planı canlı modelle yeniden optimize et (40 sn).** Ekip → Görev ver: **“Planımı ilerlememe göre yeniden optimize et”**.
+   - Gözlemevi işi modelle Yörüngeci'ye verir.
+   - Yörüngeci (`gpt-oss-120b`) kalan planı ilerlemene göre yeniden çizer.
+   - Onay kartında önce → sonra özeti görünür: kalan görev, toplam süre, ortalama zorluk, görev türleri ve modelin kendi değişiklik maddeleri. Kartın altında öneriyi hangi modelin hazırladığı yazar.
+   - **Onayla** de: Yol haritası güncellenir. Onaylamadan plan değişmez.
+   - Model yanıt vermezse plan bozulmaz; akışta söylenir ve tekrar denenebilir.
+9. **Çıkış ve giriş (20 sn).** Çıkış yap, aynı bilgilerle giriş yap: iki takımyıldız ve iki ikiz yerinde.
 
 **Neden çok ajan?**
 

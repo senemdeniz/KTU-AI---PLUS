@@ -32,7 +32,8 @@ SAYAC: collections.Counter = collections.Counter()
 
 def _akilli(system: str, payload: dict) -> dict:
     ia_istemleri = {ia.PROFILE_EXTRACTOR: "Astronom", ia.GOAL_SELECTOR: "Kutup Yıldızı", ia.ROADMAP_PLANNER: "Haritacı",
-                    ia.FEEDBACK_COACH: "Rehber", ia.TWIN_VOICE: "İkiz", ia.REPLANNER: "Yörüngeci"}
+                    ia.FEEDBACK_COACH: "Rehber", ia.TWIN_VOICE: "İkiz", ia.REPLANNER: "Yörüngeci",
+                    ia.PLAN_OPTIMIZER: "Yörüngeci"}
     for istem, ajan in ia_istemleri.items():
         if system == istem:
             SAYAC[ajan] += 1
@@ -56,7 +57,7 @@ def _akilli(system: str, payload: dict) -> dict:
     if system == g.GOZLEMEVI_PROMPT:
         SAYAC["Gözlemevi"] += 1
         m = payload["message"].lower()
-        isler = [i for i, k in (("sinav_plani", "vize"), ("mini_sinav", "mini"), ("kaynak", "kaynak"), ("hafiflet", "yoğun")) if k in m]
+        isler = [i for i, k in (("sinav_plani", "vize"), ("mini_sinav", "mini"), ("kaynak", "kaynak"), ("hafiflet", "yoğun"), ("optimize", "optimize")) if k in m]
         return {"isler": isler, "alan": None, "gerekce": "Görevi okudum ve uygun ajanlara verdim."}
     if system == g.SOHBET_YONLENDIR_PROMPT:
         SAYAC["Gözlemevi"] += 1
@@ -97,8 +98,10 @@ def _tam_akis(c: TestClient) -> list[dict]:
     assert v["durum"] == "hazir" and all(a["hazir"] for a in v["alanlar"])
     assert c.post(f"/v2/sessions/{sid}/tracks", json={"tur": "akademik", "konu": "Olasılık"}).status_code == 200
     assert c.post(f"/v2/sessions/{sid}/demo/skip", json={"gun": 4, "tutarlilik": 0.2}).status_code == 200
-    for metin in ("Bu hafta yoğunum, planı hafiflet", "Mini sınav hazırla", "Kaynak öner"):
+    for metin in ("Bu hafta yoğunum, planı hafiflet", "Mini sınav hazırla", "Kaynak öner", "Planımı ilerlememe göre yeniden optimize et"):
         assert c.post(f"/v2/sessions/{sid}/assign", json={"metin": metin}).status_code == 200
+    for p in c.get(f"/v2/sessions/{sid}").json()["oneriler"]:          # optimizasyon önerisi onaylanabilir
+        assert c.post(f"/v2/sessions/{sid}/proposals/{p['id']}/approve").status_code == 200
     assert c.post(f"/v2/sessions/{sid}/chat", json={"metin": "Planım nasıl gidiyor?"}).status_code == 200
     a = c.get(f"/v2/sessions/{sid}").json()["alanlar"][0]
     k = next(y for y in a["ikiz"]["yildizlar"] if y["acik"])
