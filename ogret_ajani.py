@@ -100,7 +100,9 @@ Kurallar:
   ikizin cevabı da yanlış çıksın.
 - Anlatımda hiç geçmeyen bir konuyu sorma. Cümleyi kelimesi kelimesine tekrar ettiren ya da "doğru mu?" diye
   soran soru yazma; anlamayı ölç (neden, nasıl, ne olur).
-- Soru sayısı: anlatımdaki farklı iddia sayısı kadar; en az 1, en fazla 4. Aynı iddiayı iki kez sorma.
+- Kapsam: anlatımdaki HER cümle en az bir sorunun "hedef" listesinde olsun; hiçbir cümleyi sınamadan bırakma.
+  Birbirine bağlı iki cümleyi tek soruda sınayabilirsin. Soru sayısı en az 1, en fazla 4; 4'ten fazla cümle varsa
+  en önemli iddiaları seç ve kalanları ilgili sorulara hedef olarak ekle. Aynı iddiayı iki kez sorma.
 - "reference": konunun DOĞRU bilgisine göre 1-2 cümlelik cevap; kullanıcının cümlesi yanlışsa doğrusunu yaz.
   "key_points": 2-4 anahtar kavram.
 - "onceki_sorular" verildiyse: sonucu "yanlis" ya da "eksik" olan soruları aynı soru metniyle koru (kullanıcı
