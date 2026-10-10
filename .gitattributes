@@ -1,2 +1,3 @@
 *.sh text eol=lf
-*.bat text eol=crlf
+# Windows betiği depoda da CRLF saklanır; ZIP ile indirilse bile bozulmaz
+*.bat -text
