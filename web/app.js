@@ -494,6 +494,24 @@ function kaynakBolumu(k, kontrol) {
   return h('div', {}, h('p', { class: 'sis' }, k.yaklasim));
 }
 const bolumLinkleri = (bolum) => (bolum?.length ? h('span', { class: 'bolum-link' }, bolum.map((b) => h('a', { href: guvenliUrl(b.url), target: '_blank', rel: 'noopener noreferrer' }, b.baslik))) : null);
+// Yol haritasında görünen tek kaynak: adı, kısa bilgi satırı ve tek düğme. Ayrıntılar katlanır bölümde.
+function anaKaynakSade(k, birincil) {
+  if (birincil) return h('div', { class: 'ana-kaynak-sade' }, h('div', {}, h('span', { class: 'kucuk sis2' }, 'Senin birincil kaynağın'), h('h3', {}, birincil.baslik)),
+    birincil.url ? h('a', { class: 'dugme kucuk', href: guvenliUrl(birincil.url), target: '_blank', rel: 'noopener noreferrer' }, 'Kaynağı aç') : null);
+  if (!k) return null;
+  if (k.kaynak_turu === 'dogrulanmis' && k.secim) {
+    const s = k.secim;
+    return h('div', { class: 'ana-kaynak-sade' },
+      h('div', {}, h('span', { class: 'kucuk sis2' }, 'Önerilen kaynak'), h('h3', {}, s.baslik),
+        h('p', { class: 'kucuk sis' }, [s.tur, ucretEtiketi(s), s.dil].filter(Boolean).join(' · '))),
+      h('a', { class: 'dugme kucuk', href: guvenliUrl(s.url), target: '_blank', rel: 'noopener noreferrer' }, 'Bu kaynakla başla'));
+  }
+  const p = k.platformlar?.[0];
+  return p ? h('div', { class: 'ana-kaynak-sade' },
+    h('div', {}, h('span', { class: 'kucuk sis2' }, 'Önerilen platform'), h('h3', {}, p.ad), h('p', { class: 'kucuk sis' }, `“${p.terim}” konu sayfası · ${p.dil}`)),
+    h('a', { class: 'dugme kucuk', href: guvenliUrl(p.url), target: '_blank', rel: 'noopener noreferrer' }, 'Konu sayfasına git')) : null;
+}
+const katla = (baslik, ...icerik) => h('details', { class: 'katla' }, h('summary', {}, baslik), h('div', { class: 'katla-ic' }, ...icerik));
 function kendiKaynakFormu(a) {
   const baslik = h('input', { class: 'girdi', id: 'kk-baslik', maxlength: 120, placeholder: 'Örn. Hocamın ders notları, Grokking Algorithms' });
   const url = h('input', { class: 'girdi', id: 'kk-url', maxlength: 500, placeholder: 'https://… (isteğe bağlı)', inputmode: 'url' });
@@ -559,7 +577,6 @@ function haftalikRota(a, bugun, bolumBy, acikDurum = new Map()) {
     d.append(
       h('summary', {}, h('span', { class: 'hafta-no' }, `${wi + 1}. hafta`), h('span', { class: 'hafta-tema' }, tema ? tema.theme : `${bas}–${son}. günler`),
         h('span', { class: 'hafta-ilerleme' }, h('i', { style: `width:${gorevler.length ? Math.round((bitenSay / gorevler.length) * 100) : 0}%` })), h('span', { class: 'kucuk sis2' }, `${bitenSay}/${gorevler.length}`)),
-      tema ? h('p', { class: 'kucuk sis', style: 'margin:4px 0 0' }, `Kilometre taşı: ${tema.milestone}`) : null,
       haftaGogu(gunler, bugun),
       h('ul', { class: 'hafta-gorevler' }, gorevler.map((t) => h('li', { class: (t.done ? 'bitti' : '') + (t.day === bugun ? ' bugun' : '') + (t.type === 'teach' ? ' anlat' : '') },
         h('span', { class: 'g' }, `${t.done ? '★' : '☆'} ${t.day}. gün`),
@@ -573,35 +590,32 @@ function haritaPano() {
   const haftaAcik = new Map();
   const formlar = {};
   let kontrolEdiliyor = false;
-  const kontrolEt = async (alan) => {
+  const kontrolEt = async (alan, sessiz = false) => {
     if (kontrolEdiliyor) return; kontrolEdiliyor = true; S.aktifPano?.guncelle(S.view);
-    try { const r = await api(`/v2/sessions/${S.sid}/sources/check`, 'POST', { alan }); bildir(`${r.acik}/${r.toplam} bağlantı açılıyor`); } catch (e) { bildir(e.message); }
+    try { const r = await api(`/v2/sessions/${S.sid}/sources/check`, 'POST', { alan }); if (!sessiz) bildir(`${r.acik}/${r.toplam} bağlantı açılıyor`); } catch (e) { bildir(e.message); }
     kontrolEdiliyor = false; await tazele(); S.aktifPano?.guncelle(S.view);
   };
   const guncelle = (v) => {
     const a = aktifAlan(); if (!a?.hazir) { el.replaceChildren(h('p', { class: 'sis' }, 'Harita hazırlanıyor…')); return; }
-    if (!a.kaynak_kontrol && !otoKontrol.has(a.alan)) { otoKontrol.add(a.alan); kontrolEt(a.alan); }
+    if (!a.kaynak_kontrol && !otoKontrol.has(a.alan)) { otoKontrol.add(a.alan); kontrolEt(a.alan, true); }
     const bugun = a.ilerleme.gun + 1;
     const bolumBy = Object.fromEntries((a.ikiz?.yildizlar || []).map((y) => [y.id, y.bolum]));
     const birincil = a.kendi_kaynaklar?.find((k) => k.id === a.birincil);
     el.replaceChildren(
       baslikSatiri('Yol haritan', a.hedef.secilen),
       alanSecici(() => guncelle(S.view)),
-      h('div', { class: 'hedef-satiri' },
-        h('div', {}, h('p', { class: 'sis' }, a.hedef.gerekce), h('p', { class: 'kucuk sis2', style: 'margin-top:8px' }, `Başarı ölçütü: ${a.hedef.olcut} · Süre: ${a.hedef.sure} gün (Profil’den değiştirebilirsin)`)),
-        h('div', { class: 'parlaklik' }, h('b', {}, `%${a.ilerleme.parlaklik}`), h('span', {}, 'Hedef parlaklığı'), h('span', { class: 'kucuk sis2' }, 'İkizinin başarısı kadar parlar'))),
-      h('section', { class: 'bolum' },
-        h('div', { class: 'bolum-bas' }, h('h3', {}, birincil ? 'Senin birincil kaynağın' : 'Önerilen kaynak'),
-          h('div', { class: 'sag-eylem' },
-            dugme(kontrolEdiliyor ? 'Kontrol ediliyor…' : 'Bağlantıları şimdi kontrol et', () => kontrolEt(a.alan), 'ince kucuk'),
-            dugme('Yeniden tara', () => yap(() => api(`/v2/sessions/${S.sid}/assign`, 'POST', { metin: 'Kaynak öner' }), 'Kaynak Avcısı yeniden tarıyor'), 'ince kucuk'))),
-        birincil ? h('div', { class: 'kaynak-ana' }, h('h3', {}, birincil.baslik), guvenSatiri(birincil, a.kaynak_kontrol),
-          birincil.url ? h('div', {}, h('a', { class: 'dugme kucuk git', href: guvenliUrl(birincil.url), target: '_blank', rel: 'noopener noreferrer' }, 'Bu kaynakla başla')) : null,
-          h('p', { class: 'kucuk sis2' }, 'Kaynak Avcısı’nın önerisi aşağıda duruyor.')) : null,
-        kaynakBolumu(a.kaynaklar, a.kaynak_kontrol),
-        h('div', { class: 'kendi-bolum' }, h('h4', { style: 'margin:0;font-size:18px' }, 'Kendi kaynakların'), kendiKaynaklar(a), (formlar[a.alan] ??= kendiKaynakFormu(a)))),
-      h('section', { class: 'bolum' }, h('h3', {}, `${a.hedef.sure} günlük rota`), h('p', { class: 'kucuk sis2' }, 'Her hafta bir takımyıldız: altın yıldızlar bitirdiğin günler, halka bugünün, mavi elmas ikizine anlatacağın gün.'),
-        haftalikRota(a, bugun, bolumBy, haftaAcik)));
+      h('p', { class: 'hedef-ozet' }, `${a.hedef.sure} gün`, h('span', { 'aria-hidden': 'true' }, ' · '), `Bugün ${Math.min(a.ilerleme.gun + 1, a.hedef.sure)}. gün`,
+        h('span', { 'aria-hidden': 'true' }, ' · '), `Hedef parlaklığı %${a.ilerleme.parlaklik}`),
+      anaKaynakSade(a.kaynaklar, birincil),
+      h('section', { class: 'bolum' }, h('h3', {}, 'Rotan'), haftalikRota(a, bugun, bolumBy, haftaAcik)),
+      h('div', { class: 'katla-grup' },
+        katla('Neden bu hedef?', h('p', { class: 'sis' }, a.hedef.gerekce), h('p', { class: 'kucuk sis2' }, `Başarı ölçütü: ${a.hedef.olcut}. Süreyi Profil’den değiştirebilirsin.`)),
+        katla('Tüm kaynaklar ve strateji',
+          h('div', { class: 'sag-eylem', style: 'justify-content:flex-start;margin-bottom:8px' },
+            dugme(kontrolEdiliyor ? 'Kontrol ediliyor…' : 'Bağlantıları kontrol et', () => kontrolEt(a.alan), 'ince kucuk'),
+            dugme('Yeniden tara', () => yap(() => api(`/v2/sessions/${S.sid}/assign`, 'POST', { metin: 'Kaynak öner' }), 'Kaynak Avcısı yeniden tarıyor'), 'ince kucuk')),
+          kaynakBolumu(a.kaynaklar, a.kaynak_kontrol)),
+        katla('Kendi kaynağını ekle', kendiKaynaklar(a), (formlar[a.alan] ??= kendiKaynakFormu(a)))));
   };
   return { el, guncelle };
 }
@@ -736,7 +750,7 @@ function adimSeridi(onSec) {
 function ekipPano() {
   let secili = 'Gözlemevi', cikti = null, ciktiSayi = -1, yukleniyor = false;
   const haritaKap = h('div', {}), ciktiKap = h('aside', { class: 'cikti', 'aria-live': 'polite' }), simdi = h('div', { class: 'simdi' });
-  const oneriKap = h('div', {}), gorevKap = h('div', {}), akis = h('div', { class: 'canli-akis', style: 'max-height:none', 'aria-live': 'polite' }), sohbetKap = h('div', {});
+  const oneriKap = h('div', {}), gorevKap = h('div', {}), sohbetKap = h('div', { class: 'konus-sohbet', 'aria-live': 'polite' });
   let mod = 'gorev', yanit = h('div', { class: 'hata-kutu', hidden: true, role: 'alert' });
   const metin = h('textarea', { id: 'komut-metin', maxlength: 400, rows: 2, 'aria-label': 'Ekibe mesaj' });
   const ajanSec = h('select', { class: 'girdi', style: 'min-height:38px;padding:0 10px;width:auto', 'aria-label': 'Hangi ajan', hidden: true });
@@ -766,6 +780,7 @@ function ekipPano() {
     if (!o) { ciktiKap.replaceChildren(h('p', { class: 'sis' }, yukleniyor ? 'Çıktı getiriliyor…' : 'Bir ajana dokun.')); return; }
     ciktiKap.replaceChildren(
       h('div', { class: 'cikti-bas' }, avatar(o.ajan), h('div', {}, h('h3', {}, o.ajan), h('p', { class: 'kucuk sis' }, o.rol))),
+      (() => { const m = S.view?.ajanlar?.find((x) => x.ad === o.ajan)?.model; return m ? h('p', { class: 'ajan-model' }, m) : null; })(),
       o.fayda ? h('p', { class: 'cikti-fayda' }, o.fayda) : null,
       ...(o.bolumler.length ? o.bolumler.map((b) => h('section', { class: 'cikti-bolum' }, h('h4', {}, b.baslik),
         h('ul', {}, b.satirlar.map((x) => h('li', {}, typeof x === 'object' ? h('a', { href: guvenliUrl(x.url), target: '_blank', rel: 'noopener noreferrer' }, x.metin) : x)))))
@@ -776,18 +791,14 @@ function ekipPano() {
     try { cikti = await api(`/v2/sessions/${S.sid}/agents/${encodeURIComponent(ad)}/output`); } catch (e) { bildir(e.message); cikti = { ajan: ad, rol: '', bolumler: [] }; }
     yukleniyor = false; ciktiCiz(); S.aktifPano?.guncelle(S.view);
   };
-  const seritKap = h('div', {}), kartKap = h('div', {});
-  let kartlarCizildi = false;
-  const el = h('div', {}, baslikSatiri('Ekip', 'Ajanların ne yaptığını canlı izle; birine dokun, ne ürettiğini gör.'), simdi,
+  const seritKap = h('div', {});
+  const el = h('div', {}, baslikSatiri('Ekibin', 'Ajanlar senin için canlı çalışıyor; birine dokun, ne ürettiğini gör.'), simdi,
     h('div', { class: 'zihin-yerlesim' }, haritaKap, ciktiKap),
-    h('h3', { class: 'ara-baslik', style: 'margin-top:28px' }, 'Son adımlar'), seritKap,
-    h('section', { class: 'bolum' }, h('h3', { class: 'ara-baslik' }, 'Ekibini tanı: kim ne işe yarar?'),
-      h('p', { class: 'sis kucuk', style: 'margin:-4px 0 14px' }, 'Bir karta dokun; o ajanın senin için ürettiği yukarıda açılır.'), kartKap),
-    h('div', { class: 'ekip-yerlesim', style: 'margin-top:34px' },
-      h('div', {}, h('h3', { class: 'ara-baslik' }, 'Akış'), oneriKap, gorevKap, akis),
-      h('div', {}, h('h3', { class: 'ara-baslik' }, 'Ekibe görev ver'), sohbetKap, komut)));
+    h('h3', { class: 'ara-baslik', style: 'margin-top:36px' }, 'Ekibinle konuş'),
+    h('p', { class: 'kucuk sis', style: 'margin:-6px 0 12px' }, 'Görev ver ya da soru sor; hangi ajanın yanıt vereceğine Gözlemevi karar verir.'),
+    h('section', { class: 'konus' }, komut, oneriKap, sohbetKap, gorevKap),
+    h('h3', { class: 'ara-baslik', style: 'margin-top:36px' }, 'Son adımlar'), seritKap);
   modGuncelle();
-  let sonSayi = -1;
   const guncelle = (v) => {
     const sonOlay = S.olaylar.at(-1);
     const taze = sonOlay && Date.now() / 1000 - sonOlay.t < 8;
@@ -797,7 +808,6 @@ function ekipPano() {
       : h('span', { class: 'sis' }, h('i', { class: 'canli-nokta bos' }), 'Ekip hazır, seni bekliyor. Bir görev ver ya da bir ajana dokun.'));
     haritaKap.replaceChildren(zihinHaritasi(v, aktif, sonOlay?.mesaj, secili, ciktiGetir));
     seritKap.replaceChildren(adimSeridi(ciktiGetir));
-    if (!kartlarCizildi) { kartlarCizildi = true; kartKap.replaceChildren(ajanKartlari(v.ajanlar, (ad) => { ciktiGetir(ad); scrollTo({ top: 0, behavior: 'smooth' }); })); }
     if (!cikti && !yukleniyor) ciktiGetir(secili);
     else if (S.olaylar.length !== ciktiSayi && S.olaylar.slice(ciktiSayi < 0 ? 0 : ciktiSayi).some((o) => o.ajan === secili)) { ciktiSayi = S.olaylar.length; ciktiGetir(secili); }
     if (ciktiSayi < 0) ciktiSayi = S.olaylar.length;
@@ -812,12 +822,8 @@ function ekipPano() {
       g.sonuc?.mini_sinav ? h('div', {}, h('b', { style: 'color:var(--altin)' }, 'Mini sınav'), h('ol', { style: 'margin:6px 0 0;padding-left:20px' }, g.sonuc.mini_sinav.map((q) => h('li', {}, q)))) : null,
       g.sonuc?.kaynak ? h('div', {}, h('b', { style: 'color:var(--altin)' }, 'Kaynaklar'), h('p', { class: 'kucuk sis' }, g.sonuc.kaynak.join(' · ')), h('button', { class: 'baglanti', onclick: () => sekmeGit('harita') }, 'Yol haritası sayfasında gör')) : null)));
     sohbetKap.replaceChildren(...v.sohbet.slice(-4).map((m) => (m.rol === 'kullanici'
-      ? h('div', { class: 'yanit-kutu', style: 'background:rgba(245,215,142,.08);border-color:rgba(245,215,142,.3)' }, h('span', { class: 'kucuk sis2' }, 'Sen'), h('span', {}, m.metin))
+      ? h('div', { class: 'yanit-kutu sen' }, h('span', { class: 'kucuk sis2' }, 'Sen'), h('span', {}, m.metin))
       : balon({ ajan: m.ajan, mesaj: m.metin, tur: 'chat' }))));
-    if (S.olaylar.length !== sonSayi) {
-      sonSayi = S.olaylar.length;
-      akis.replaceChildren(...(calisiyor && sonOlay ? [yaziyor()] : []), ...S.olaylar.slice(-12).reverse().map((o, i) => balon(o, i === 0 && S.yeniOlay)));
-    }
   };
   return { el, guncelle };
 }
@@ -930,15 +936,17 @@ function ogretPano() {
     } catch (e) { onizleme.hidden = true; uyari.textContent = e.message; uyari.hidden = false; }
   });
   const fotoBtn = h('button', { type: 'button', class: 'dugme ince', onclick: () => dosya.click() }, 'Fotoğraftan anlat');
-  const ekleBtn = dugme('Cümleleri ekle', async () => {
+  const ekleBtn = dugme('İkizine anlat', async () => {
     const m = metin.value.trim(); if (!m) return; uyari.hidden = true;
     await yap(async () => {
       const r = await api(`/v2/sessions/${S.sid}/teach/add`, 'POST', { metin: m, alan: aktifAlan().alan });
       if (r.ok) { metin.value = ''; if (r.uyarilar?.length) { uyari.textContent = r.uyarilar.map((u) => u.mesaj).join(' '); uyari.hidden = false; } else bildir('İkizin yeni cümleleri öğrendi'); }
       else { uyari.textContent = (r.engel === 'konu_disi' ? 'Konu Bekçisi: ' : '') + r.mesaj; uyari.hidden = false; }
     });
-  }, 'ince');
-  const kavramSec = h('select', { class: 'girdi', id: 'og-kavram', style: 'width:auto;min-width:240px' });
+  });
+  metin.addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) ekleBtn.click(); });
+  const kavramSec = h('select', { class: 'girdi', id: 'og-kavram', hidden: true, 'aria-hidden': 'true' });   // seçimin değeri burada tutulur; kullanıcı çipleri görür
+  const kavramCipKap = h('div', { class: 'kavram-cipleri', role: 'group', 'aria-label': 'Kavram seç' }), ikizBalon = h('div', {});
   const kavramDegis = async (alan, kavram) => {
     S.ogretGorev = kavram;
     try { S.view = await api(`/v2/sessions/${S.sid}/teach/select`, 'POST', { alan, kavram }); } catch (e) { bildir(e.message); }
@@ -952,7 +960,7 @@ function ogretPano() {
     sinavBtn.disabled = false; sinavBtn.textContent = 'İkizini sınava sok';
     sonucKap.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
   });
-  const silBtn = h('button', { class: 'baglanti', onclick: () => yap(() => api(`/v2/sessions/${S.sid}/teach`, 'DELETE'), 'İkizin öğrendiklerini sildi') }, 'Hepsini sil');
+  const silBtn = h('button', { class: 'baglanti sil-hepsi', onclick: () => yap(() => api(`/v2/sessions/${S.sid}/teach`, 'DELETE'), 'İkizin öğrendiklerini sildi') }, 'Hepsini sil');
   const duzelt = async (no) => {
     await yap(async () => {
       const r = await api(`/v2/sessions/${S.sid}/teach/sentences/${no}`, 'DELETE');
@@ -961,21 +969,23 @@ function ogretPano() {
       bildir(`${ROMEN[no - 1] || no}. cümle düzeltmen için yazı alanına alındı`);
     });
   };
+  const adim = (no, baslik, ...icerik) => h('section', { class: 'ogret-adim' }, h('h3', {}, h('span', { class: 'adim-no' }, no), baslik), ...icerik);
   const el = h('div', {}, baslikKap,
     h('div', { class: 'ogret-yerlesim' },
-      h('div', { style: 'display:grid;gap:18px' },
-        h('div', { class: 'guven-notu' }, svg('svg', { viewBox: '0 0 24 24' }, svg('path', { d: IKON.ayarlar })), h('p', {}, 'Ad, telefon, e-posta, kimlik ya da kart bilgisi yazma. Yazdıkların yalnızca bu sınav için kullanılır, ikiz dışına çıkmaz ve istediğin an silinir. Konuyla ilgisiz anlatımı Konu Bekçisi durdurur.')),
-        h('div', { class: 'grup' }, h('label', { class: 'etiket', for: 'og-kavram' }, 'Hangi kavramı öğretiyorsun?'), kavramSec, ipucuKap),
-        cumleKap, h('label', { class: 'etiket', for: 'og-metin' }, 'Anlat'), metin, gecici, uyari,
-        onizleme, dosya,
-        h('div', { class: 'sag-eylem' }, sesBtn, fotoBtn, ekleBtn, sinavBtn),
-        h('p', { class: 'kucuk sis2' }, 'Fotoğrafta yüz, isim ya da numara olmasın. Görüntü ve ses sunucuda saklanmaz; yalnızca yazıya dökülür ve eklemeden önce sen kontrol edersin.')),
-      sonucKap));
+      h('div', { class: 'ogret-adimlar' },
+        adim('1', 'Kavram seç', kavramCipKap, kavramSec, ipucuKap),
+        adim('2', 'Anlat', ikizBalon, cumleKap,
+          h('div', { class: 'anlat-kutu' }, metin, gecici,
+            h('div', { class: 'anlat-alt' }, h('div', { class: 'anlat-araclar' }, sesBtn, fotoBtn), ekleBtn)),
+          uyari, onizleme, dosya,
+          h('p', { class: 'kucuk sis2' }, 'Kişisel bilgi (ad, telefon, kimlik, kart) yazma; Konu Bekçisi konu dışı anlatımı durdurur. Ses ve fotoğraf yalnızca yazıya dökülür, saklanmaz.')),
+        adim('3', 'Sınava sok', h('p', { class: 'kucuk sis' }, 'Kaşif soruları hazırlar, ikizin yalnızca senin cümlelerinle cevap verir, Hakem bağımsız puanlar.'), h('div', {}, sinavBtn))),
+      h('aside', { class: 'ogret-sonuc' }, sonucKap)));
   const guncelle = (v) => {
     const a = aktifAlan(); const og = v.ogret; const bu = og.alan === a.alan;
     const konu = bu ? og.konu : a.konu.split('·').pop().trim();
-    baslikKap.replaceChildren(baslikSatiri(`İkizine öğret · ${ikizAdi(a)}`, `${ikizAdi(a)}, ${konu} ikizin. Bir kavram seç, ona anlat, sınava sok. Yalnızca o kavram için anlattıklarını bilir; diğer ikizlerin bunu duymaz.`),
-      ikizSecici(v, () => { const b = S.view.alanlar[S.alan]; kavramDegis(b.alan, b.ikiz?.siradaki?.id || 'serbest'); }));
+    baslikKap.replaceChildren(baslikSatiri(`İkizine öğret · ${ikizAdi(a)}`, `${ikizAdi(a)} yalnızca senin anlattıklarını bilir. Anlat, sonra sınava sok.`),
+      v.alanlar.length > 1 ? ikizSecici(v, () => { const b = S.view.alanlar[S.alan]; kavramDegis(b.alan, b.ikiz?.siradaki?.id || 'serbest'); }) : null);
     const acik = (a.ikiz?.yildizlar || []).filter((y) => y.acik && !y.id.startsWith('serbest-'));
     const secili = bu && og.kavram ? (og.kavram === 'serbest' ? '' : og.kavram) : (S.ogretGorev && acik.some((y) => y.id === S.ogretGorev) ? S.ogretGorev : (a.ikiz?.siradaki?.id || ''));
     if ((!bu || og.kavram == null) && a.hazir && !secimSuruyor) {
@@ -985,6 +995,11 @@ function ogretPano() {
       kavramSec.replaceChildren(...acik.map((y) => h('option', { value: y.id, selected: y.id === secili }, `${y.gun}. gün · ${y.baslik}${y.star !== 'sonuk' ? ` (${YILDIZ_ADI[y.star].toLowerCase()})` : ''}`)),
         h('option', { value: 'serbest', selected: !secili }, 'Serbest anlatım (plan dışı)'));
     }
+    const YILDIZ_ISARET = { sonuk: '☆', parlak: '★', halkali: '✪' };
+    kavramCipKap.replaceChildren(...acik.map((y) => h('button', { type: 'button', class: `kavram-cip ${y.star}`, 'aria-pressed': String(y.id === secili), title: YILDIZ_ADI[y.star],
+      onclick: () => { if (y.id !== secili) kavramDegis(a.alan, y.id); } }, h('span', { 'aria-hidden': 'true' }, YILDIZ_ISARET[y.star] || '☆'), ` ${y.baslik}`)),
+      h('button', { type: 'button', class: 'kavram-cip serbest', 'aria-pressed': String(!secili), onclick: () => { if (secili) kavramDegis(a.alan, 'serbest'); } }, 'Serbest anlatım'));
+    if (!acik.length) kavramCipKap.prepend(h('p', { class: 'kucuk sis' }, 'Rotanda anlatma günü gelince kavramlar burada açılır. Şimdilik serbest anlatabilirsin.'));
     const yild = acik.find((y) => y.id === secili);
     ipucuKap.replaceChildren(
       konuIpucu(a.konu) ? h('p', { class: 'kucuk sis' }, konuIpucu(a.konu)) : null,
@@ -993,8 +1008,13 @@ function ogretPano() {
     const gb = son?.geri_bildirim;
     const hatali = new Set(gb?.duzelt || []);
     const cumleler = bu ? og.cumleler : [];
-    cumleKap.replaceChildren(...(cumleler.length ? [h('p', { class: 'etiket' }, `İkizine “${yild?.baslik || 'serbest anlatım'}” için anlattıkların`), h('p', { class: 'kucuk sis2' }, 'İkizin bu kavram hakkında yalnızca bu cümleleri bilir.'), h('ol', { class: 'cumleler' }, cumleler.map((c, i) => h('li', { class: hatali.has(i + 1) ? 'hatali' : '' },
-      h('span', {}, c, hatali.has(i + 1) ? h('button', { class: 'baglanti duzelt', onclick: () => duzelt(i + 1) }, 'Düzelt') : null)))), h('div', {}, silBtn)] : []));
+    const kavramAdi = yild?.baslik || konu;
+    ikizBalon.replaceChildren(h('div', { class: 'ikiz-balon' }, ikizAvatar(v, a, 52),
+      h('p', {}, cumleler.length
+        ? `${cumleler.length} cümle öğrendim. ${hatali.size ? 'Hakem bazı cümlelerini işaretledi; onları düzeltirsen daha iyi cevap veririm.' : 'Biraz daha anlatabilir ya da beni sınava sokabilirsin.'}`
+        : `“${kavramAdi}” hakkında hiçbir şey bilmiyorum. Bana bir arkadaşına anlatır gibi anlatır mısın?`)));
+    cumleKap.replaceChildren(...(cumleler.length ? [h('ol', { class: 'cumleler' }, cumleler.map((c, i) => h('li', { class: hatali.has(i + 1) ? 'hatali' : '' },
+      h('span', {}, c, hatali.has(i + 1) ? h('button', { class: 'baglanti duzelt', onclick: () => duzelt(i + 1) }, 'Düzelt') : null)))), h('div', { style: 'text-align:right' }, silBtn)] : []));
     sinavBtn.disabled = !cumleler.length || sinavBtn.textContent !== 'İkizini sınava sok';
     sonucKap.replaceChildren(...(son ? [h('h3', { style: 'font-size:26px;margin-bottom:6px' }, `İkiz sınavda: ${son.kavram || son.topic}`),
       h('div', { class: 'yildiz-sonuc' }, h('b', { style: 'font-family:var(--baslik);font-size:34px' }, `${son.score} / ${son.total}`), h('span', { class: 'sis' }, son.star === 'halkali' ? 'İkizin bu kavramı tam biliyor: halkalı yıldız yandı' : son.star === 'parlak' ? 'İkizin kısmen öğrendi: yıldız yandı, halkası için eksikleri tamamla' : 'İkizin henüz öğrenemedi: yıldız sönük')),
@@ -1007,7 +1027,7 @@ function ogretPano() {
         h('span', { class: 'kucuk sis2' }, `İkiz (yapay zekâ) yanıtı${m.cited?.length ? ` · dayandığı cümle: ${m.cited.map((c) => ROMEN[c - 1] || c).join(', ')}` : ''}`), h('p', {}, m.twin_answer),
         h('span', { class: `karar ${m.result}` }, { dogru: 'Doğru', eksik: 'Eksik', yanlis: 'Yanlış', anlatilmadi: 'Anlatılmadı' }[m.result]),
         m.hint ? h('div', { style: 'display:flex;gap:10px;align-items:flex-start' }, avatar('Hakem'), h('p', { class: 'sis' }, m.hint)) : null))]
-      : [h('p', { class: 'sis2' }, 'İkizini sınava soktuğunda sonuçlar burada anında görünür: Hakem hatalı cümleni işaretler, eksik kalan yeri söyler ve seni kaynağın doğru bölümüne götürür. Cevabı söylemez.')]));
+      : [h('div', { class: 'sonuc-bos' }, h('b', {}, 'Sınav sonucu burada görünür'), h('p', { class: 'kucuk sis' }, 'Hakem hatalı cümleni işaretler, eksik kalan yeri söyler ve seni kaynağın doğru bölümüne götürür. Cevabı söylemez.'))]));
   };
   return { el, guncelle };
 }
@@ -1233,10 +1253,10 @@ async function canliDemo() {
     demoAnlat(3, N, `İkizin boş doğdu. Ona “${kavram.baslik}” kavramını anlatıyoruz. İlk cümle doğru.`);
     const alan = () => $('#og-metin');
     await yazarakDoldur(alan(), 'Bağlı listede her düğüm bir sonraki düğümü işaret eder.');
-    await tikla('Cümleleri ekle'); await sonucBekle((v) => v.ogret.cumleler.length === 1);
+    await tikla('İkizine anlat'); await sonucBekle((v) => v.ogret.cumleler.length === 1);
     demoAnlat(4, N, 'İkinci cümlede bilerek bir hata yapıyoruz: bağlı listede indeksle doğrudan erişim yoktur.');
     await yazarakDoldur(alan(), 'Bağlı listede elemana indeksle doğrudan ulaşılır.');
-    await tikla('Cümleleri ekle'); await sonucBekle((v) => v.ogret.cumleler.length === 2);
+    await tikla('İkizine anlat'); await sonucBekle((v) => v.ogret.cumleler.length === 2);
     demoAnlat(5, N, 'İkizi sınava sokuyoruz. Kaşif soruları hazırlar, İkiz yalnızca bu iki cümleyle cevap verir, Hakem bağımsız değerlendirir.');
     await tikla('İkizini sınava sok'); await sonucBekle((v) => v.ogret.son);
     await bekle(800);
@@ -1246,10 +1266,10 @@ async function canliDemo() {
     await sonucBekle((v) => v.ogret.cumleler.length === 1);
     alan().value = '';
     await yazarakDoldur(alan(), 'Bağlı listede indeks yoktur; bir elemana ulaşmak için baştan başlayıp düğüm düğüm gezmek gerekir.');
-    await tikla('Cümleleri ekle'); await sonucBekle((v) => v.ogret.cumleler.length === 2);
+    await tikla('İkizine anlat'); await sonucBekle((v) => v.ogret.cumleler.length === 2);
     demoAnlat(7, N, 'Eksik kalan soruyu da tamamlıyoruz: başa ekleme neden hızlı?');
     await yazarakDoldur(alan(), 'Başa ekleme hızlıdır çünkü kaydırma gerekmez; yeni düğüm eski başı işaret eder.');
-    await tikla('Cümleleri ekle'); await sonucBekle((v) => v.ogret.cumleler.length === 3);
+    await tikla('İkizine anlat'); await sonucBekle((v) => v.ogret.cumleler.length === 3);
     await tikla('İkizini sınava sok'); await sonucBekle((v) => v.ogret.son);
     await bekle(800);
     demoAnlat(8, N, `Sonuç: ${S.view.ogret.son.score}/${S.view.ogret.son.total}. İkizin artık bu kavramı biliyor ve bildiği her şeyi senden öğrendi. İkizinin gökyüzüne bakalım.`);

@@ -86,7 +86,7 @@ python3 llm_kontrol.py
 python3 -m uvicorn server:app --port 8000
 ```
 
-Sol alttaki rozet **“Demo modu”** yerine **“Canlı: gpt-oss-120b + gpt-oss-20b”** gösterir; Ekip sekmesindeki her ajan kartında o ajanın modeli yazar.
+Sol alttaki rozet **“Demo modu”** yerine **“Canlı: gpt-oss-120b + gpt-oss-20b”** gösterir; Ekip sayfasında bir ajana dokununca o ajanın modeli de görünür.
 
 - **`.env` GitHub'a gitmez** (`.gitignore`'da). Anahtarını koda, sohbete ya da ekran görüntüsüne koyma.
 - **Yalnızca anahtar yeter:** Groq anahtarı (`gsk_` ile başlar) tanınır. `LLM_BASE_URL` ve model satırları boşsa Groq adresi ile `gpt-oss-120b` ve `gpt-oss-20b` kendiliğinden seçilir.
