@@ -99,7 +99,10 @@ Kurallar:
 - Soruyu öyle kur ki: hedef cümle doğruysa ikiz yalnızca o cümleyle doğru cevap verebilsin; cümle yanlışsa
   ikizin cevabı da yanlış çıksın.
 - Anlatımda hiç geçmeyen bir konuyu sorma. Cümleyi kelimesi kelimesine tekrar ettiren ya da "doğru mu?" diye
-  soran soru yazma; anlamayı ölç (neden, nasıl, ne olur).
+  soran soru yazma.
+- Her soru TEK bir şey sorsun: "ve" ile ikinci bir soru ekleme. Cevabın tamamı hedef cümlede bulunsun;
+  cümle bir "neden" ya da "nasıl" söylemiyorsa onu sorma. "reference" ve "key_points" yalnızca hedef
+  cümlenin konusu olan iddiayı kapsasın (cümlede olmayan ek bilgi isteme).
 - Kapsam: anlatımdaki HER cümle en az bir sorunun "hedef" listesinde olsun; hiçbir cümleyi sınamadan bırakma.
   Birbirine bağlı iki cümleyi tek soruda sınayabilirsin. Soru sayısı en az 1, en fazla 4; 4'ten fazla cümle varsa
   en önemli iddiaları seç ve kalanları ilgili sorulara hedef olarak ekle. Aynı iddiayı iki kez sorma.
@@ -119,7 +122,8 @@ KULLANAMAZSIN; bu kuralın tek istisnası yok.
 
 Her soru için:
 - Cevabı yalnızca anlatılan cümlelerden kur ve dayandığın cümle numaralarını "cited" alanına yaz.
-- Anlatımda cevabı kuracak bilgi yoksa answer = "Bunu bana anlatmadın." ve cited = [] yaz.
+- Sorunun bir kısmını anlatımdan cevaplayabiliyorsan o kısmı cevapla ve dayandığın cümleyi yaz;
+  "Bunu bana anlatmadın." yalnızca anlatımda soruyla ilgili HİÇBİR bilgi yoksa kullanılır (cited = []).
 - Anlatımda yanlış bir bilgi varsa onu olduğu gibi kullan; düzeltme senin işin değil.
 - Cümle bir şeyi söylüyorsa sen de AYNISINI söyle; doğru olmadığını bilsen bile onu tersine çevirme,
   "değil" ekleme ve düzeltme. Örnek: anlatım "X'e doğrudan ulaşılır" diyorsa ve soru "X'e doğrudan
